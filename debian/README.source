@@ -1,0 +1,8 @@
+WebRTC for Debian
+-----------------
+
+The source package is based on a regular Git checkout. Afterwards all
+folders listed in setup_links.py are imported from the Chromium source code
+repository (exact revision is stated in DEPS).
+
+ -- George Hopkins <george-hopkins@null.net>  Sat, 25 Jun 2016 22:16:24 +0200

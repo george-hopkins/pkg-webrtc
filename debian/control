@@ -1,0 +1,27 @@
+Source: webrtc
+Priority: optional
+Maintainer: George Hopkins <george-hopkins@null.net>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.4
+Section: libs
+Homepage: https://webrtc.org/native-code/
+Vcs-Git: https://github.com/george-hopkins/pkg-webrtc.git
+Vcs-Browser: https://github.com/george-hopkins/pkg-webrtc
+
+Package: libwebrtc-dev
+Section: libdevel
+Architecture: any
+Depends: libwebrtc (= ${binary:Version})
+Description: WebRTC client API (development files)
+
+Package: libwebrtc-java
+Section: libs
+Architecture: i386 amd64
+Depends: libwebrtc (= ${binary:Version}), ${java:Depends}
+Description: WebRTC client API (Java bindings)
+
+Package: libwebrtc
+Section: libs
+Architecture: i386 amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: WebRTC client APIs
