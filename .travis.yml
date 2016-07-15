@@ -3,7 +3,7 @@ sudo: required
 env:
   - TRAVIS_DEBIAN_DISTRIBUTION=ubuntu/trusty
   - TRAVIS_DEBIAN_DISTRIBUTION=ubuntu/xenial
-  - TRAVIS_DEBIAN_DISTRIBUTION=ubuntu/yaketty
+  - TRAVIS_DEBIAN_DISTRIBUTION=ubuntu/yakkety
 
 services:
   - docker
