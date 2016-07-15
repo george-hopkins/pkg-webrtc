@@ -1,0 +1,12 @@
+sudo: required
+
+env:
+  - TRAVIS_DEBIAN_DISTRIBUTION=ubuntu/trusty
+  - TRAVIS_DEBIAN_DISTRIBUTION=ubuntu/xenial
+  - TRAVIS_DEBIAN_DISTRIBUTION=ubuntu/yaketty
+
+services:
+  - docker
+
+script:
+  - wget -O- https://george-hopkins.github.io/travis-ubuntu/script.sh | sh -
