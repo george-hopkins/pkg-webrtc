@@ -1,7 +1,21 @@
 Source: webrtc
 Priority: optional
 Maintainer: George Hopkins <george-hopkins@null.net>
-Build-Depends: debhelper (>= 8.0.0)
+Build-Depends:
+	debhelper (>= 8),
+	default-jdk,
+	python,
+	pkg-config,
+	gyp,
+	ninja-build,
+	libgtk2.0-dev,
+	libdbus-1-dev,
+	libgflags-dev,
+	libopus-dev,
+	libjpeg-dev,
+	libasound2-dev,
+	libpulse-dev,
+	python-colorama
 Standards-Version: 3.9.4
 Section: libs
 Homepage: https://webrtc.org/native-code/
@@ -11,17 +25,11 @@ Vcs-Browser: https://github.com/george-hopkins/pkg-webrtc
 Package: libwebrtc-dev
 Section: libdevel
 Architecture: any
-Depends: libwebrtc (= ${binary:Version})
+Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: WebRTC client API (development files)
 
 Package: libwebrtc-java
-Section: libs
-Architecture: i386 amd64
-Depends: libwebrtc (= ${binary:Version}), ${java:Depends}
-Description: WebRTC client API (Java bindings)
-
-Package: libwebrtc
-Section: libs
+Section: java
 Architecture: i386 amd64
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: WebRTC client APIs
+Description: WebRTC client API (Java bindings)

@@ -4,5 +4,58 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+export JAVA_HOME=/usr/lib/jvm/default-java
+
+GYP_ARGS =
+GYP_DEFINES =
+REPLACE_GYP_FILES =
+DISABLED_JAVA_FILES =
+
+# Disable sysroot
+GYP_DEFINES += sysroot=
+
+# Disable tests
+GYP_DEFINES += include_tests=0
+
+# Disable optional features
+GYP_DEFINES += use_libpci=0
+GYP_DEFINES += use_dbus=0
+
+# Prefer gcc/g++ over clang until clang is better tested in Ubuntu
+GYP_DEFINES += clang=0
+GYP_DEFINES += clang_use_chrome_plugins=0
+
+# Set Android variables to avoid error messages
+GYP_DEFINES += android_sdk=dummy
+GYP_DEFINES += android_sdk_jar=dummy
+GYP_DEFINES += android_sdk_root=dummy
+GYP_DEFINES += android_sdk_tools=dummy
+GYP_DEFINES += android_must_copy_system_libraries=0
+
+# Use system libraries
+REPLACE_GYP_FILES += -Duse_system_gflags=1
+REPLACE_GYP_FILES += -Duse_system_libjpeg=1
+
+# VideoCapturer depends on android.content.Context
+DISABLED_JAVA_FILES += webrtc/api/java/src/org/webrtc/VideoCapturer.java
+
+# Disable media encoders which make use of the Android multimedia framework
+DISABLED_JAVA_FILES += webrtc/api/java/src/org/webrtc/MediaCodecVideoEncoder.java
+DISABLED_JAVA_FILES += webrtc/api/java/src/org/webrtc/MediaCodecVideoDecoder.java
+
+# Disable ThreadUtils
+DISABLED_JAVA_FILES += webrtc/base/java/src/org/webrtc/ThreadUtils.java
+
+GYP_ARGS += $(REPLACE_GYP_FILES)
+
+override_dh_auto_configure:
+	./setup_links.py -v
+	./build/linux/unbundle/replace_gyp_files.py $(REPLACE_GYP_FILES)
+	$(foreach f, $(DISABLED_JAVA_FILES), test ! -f "$f" || mv "$f" "$f.orig";)
+	GYP_DEFINES="$(GYP_DEFINES)" python webrtc/build/gyp_webrtc.py $(GYP_ARGS)
+
+override_dh_auto_build:
+	ninja -C out/Release
+
 %:
 	dh $@

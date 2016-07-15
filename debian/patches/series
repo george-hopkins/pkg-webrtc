@@ -1,0 +1,6 @@
+0001-Use-system-provided-gflags.patch
+0002-Add-symlink-for-tools-generate_shim_headers.patch
+0003-Setup-Java.patch
+0004-Fix-JNI-classes.patch
+0005-Add-Java-stubs.patch
+0006-Set-path-to-JNI-library.patch

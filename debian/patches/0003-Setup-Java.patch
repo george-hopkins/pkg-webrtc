@@ -1,0 +1,213 @@
+From: George Hopkins <george-hopkins@null.net>
+Date: Mon, 27 Jun 2016 00:52:50 +0200
+Subject: Setup Java
+
+---
+ all.gyp                                            |  1 +
+ chromium/src/build/android/gyp/util/build_utils.py |  9 ++---
+ chromium/src/build/java.gypi                       | 38 +---------------------
+ webrtc/api/api.gyp                                 | 23 +++++--------
+ webrtc/api/api_java.gyp                            |  9 ++---
+ 5 files changed, 17 insertions(+), 63 deletions(-)
+
+diff --git a/all.gyp b/all.gyp
+index 2382290..5df967c 100644
+--- a/all.gyp
++++ b/all.gyp
+@@ -20,6 +20,7 @@
+       'type': 'none',
+       'dependencies': [
+         'webrtc/api/api.gyp:*',
++        'webrtc/api/api_java.gyp:*',
+         'webrtc/base/base.gyp:*',
+         'webrtc/common.gyp:*',
+         'webrtc/common_audio/common_audio.gyp:*',
+diff --git a/chromium/src/build/android/gyp/util/build_utils.py b/chromium/src/build/android/gyp/util/build_utils.py
+index 371ad90..b63e611 100644
+--- a/chromium/src/build/android/gyp/util/build_utils.py
++++ b/chromium/src/build/android/gyp/util/build_utils.py
+@@ -21,9 +21,10 @@ import zipfile
+ import md5_check  # pylint: disable=relative-import
+ 
+ sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+-from pylib.constants import host_paths
+ 
+-COLORAMA_ROOT = os.path.join(host_paths.DIR_SOURCE_ROOT,
++DIR_SOURCE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, os.pardir, os.pardir))
++
++COLORAMA_ROOT = os.path.join(DIR_SOURCE_ROOT,
+                              'third_party', 'colorama', 'src')
+ # aapt should ignore OWNERS files in addition the default ignore pattern.
+ AAPT_IGNORE_PATTERN = ('!OWNERS:!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:' +
+@@ -404,9 +405,9 @@ def GetPythonDependencies():
+ 
+   abs_module_paths = map(os.path.abspath, module_paths)
+ 
+-  assert os.path.isabs(host_paths.DIR_SOURCE_ROOT)
++  assert os.path.isabs(DIR_SOURCE_ROOT)
+   non_system_module_paths = [
+-      p for p in abs_module_paths if p.startswith(host_paths.DIR_SOURCE_ROOT)]
++      p for p in abs_module_paths if p.startswith(DIR_SOURCE_ROOT)]
+   def ConvertPycToPy(s):
+     if s.endswith('.pyc'):
+       return s[:-1]
+diff --git a/chromium/src/build/java.gypi b/chromium/src/build/java.gypi
+index 171d5e0..a4963f1 100644
+--- a/chromium/src/build/java.gypi
++++ b/chromium/src/build/java.gypi
+@@ -48,13 +48,11 @@
+ 
+ {
+   'dependencies': [
+-    '<(DEPTH)/build/android/android_lint_cache.gyp:android_lint_cache',
+     '<(DEPTH)/build/android/setup.gyp:build_output_dirs',
+   ],
+   'variables': {
+     'add_to_dependents_classpaths%': 1,
+-    'android_jar': '<(android_sdk)/android.jar',
+-    'input_jars_paths': [ '<(android_jar)' ],
++    'input_jars_paths': [],
+     'additional_src_dirs': [],
+     'javac_includes': [],
+     'jar_name': '<(_target_name).jar',
+@@ -313,7 +311,6 @@
+       ],
+       'action': [
+         'python', '<(DEPTH)/build/android/gyp/javac.py',
+-        '--bootclasspath=<(android_sdk_jar)',
+         '--classpath=>(input_jars_paths)',
+         '--src-gendirs=>(generated_src_dirs)',
+         '--javac-includes=<(javac_includes)',
+@@ -344,26 +341,6 @@
+       'includes': [ 'android/emma_instr_action.gypi' ],
+     },
+     {
+-      'variables': {
+-        'src_dirs': [
+-          '<(java_in_dir)<(java_in_dir_suffix)',
+-          '>@(additional_src_dirs)',
+-        ],
+-        'stamp_path': '<(lint_stamp)',
+-        'result_path': '<(lint_result)',
+-        'config_path': '<(lint_config)',
+-        'lint_jar_path': '<(jar_final_path)',
+-      },
+-      'inputs': [
+-        '<(jar_final_path)',
+-        '<(compile_stamp)',
+-      ],
+-      'outputs': [
+-        '<(lint_stamp)',
+-      ],
+-      'includes': [ 'android/lint_action.gypi' ],
+-    },
+-    {
+       'action_name': 'jar_toc_<(_target_name)',
+       'message': 'Creating <(_target_name) jar.TOC',
+       'inputs': [
+@@ -381,18 +358,5 @@
+         '--toc-path=<(jar_final_path).TOC',
+       ]
+     },
+-    {
+-      'action_name': 'dex_<(_target_name)',
+-      'variables': {
+-        'conditions': [
+-          ['emma_instrument != 0', {
+-            'dex_no_locals': 1,
+-          }],
+-        ],
+-        'dex_input_paths': [ '<(jar_final_path)' ],
+-        'output_path': '<(dex_path)',
+-      },
+-      'includes': [ 'android/dex_action.gypi' ],
+-    },
+   ],
+ }
+diff --git a/webrtc/api/api.gyp b/webrtc/api/api.gyp
+index 077a558..cb5ebe6 100644
+--- a/webrtc/api/api.gyp
++++ b/webrtc/api/api.gyp
+@@ -24,7 +24,10 @@
+     }],
+     # Excluded from the Chromium build since they cannot be built due to
+     # incompability with Chromium's logging implementation.
+-    ['OS=="android" and build_with_chromium==0', {
++    ['OS=="linux"', {
++      'variables': {
++        'java_home%': '<!(echo $JAVA_HOME)'
++      },
+       'targets': [
+         {
+           'target_name': 'libjingle_peerconnection_jni',
+@@ -35,20 +38,6 @@
+             'libjingle_peerconnection',
+           ],
+           'sources': [
+-            'androidvideocapturer.cc',
+-            'androidvideocapturer.h',
+-            'java/jni/androidmediacodeccommon.h',
+-            'java/jni/androidmediadecoder_jni.cc',
+-            'java/jni/androidmediadecoder_jni.h',
+-            'java/jni/androidmediaencoder_jni.cc',
+-            'java/jni/androidmediaencoder_jni.h',
+-            'java/jni/androidmetrics_jni.cc',
+-            'java/jni/androidnetworkmonitor_jni.cc',
+-            'java/jni/androidnetworkmonitor_jni.h',
+-            'java/jni/androidvideocapturer_jni.cc',
+-            'java/jni/androidvideocapturer_jni.h',
+-            'java/jni/surfacetexturehelper_jni.cc',
+-            'java/jni/surfacetexturehelper_jni.h',
+             'java/jni/classreferenceholder.cc',
+             'java/jni/classreferenceholder.h',
+             'java/jni/jni_helpers.cc',
+@@ -59,6 +48,7 @@
+           ],
+           'include_dirs': [
+             '<(libyuv_dir)/include',
++            '<(java_home)/include',
+           ],
+           # TODO(kjellander): Make the code compile without disabling these flags.
+           # See https://bugs.chromium.org/p/webrtc/issues/detail?id=3307
+@@ -85,6 +75,9 @@
+           'sources': [
+            'java/jni/jni_onload.cc',
+           ],
++          'include_dirs': [
++            '<(java_home)/include',
++          ],
+           'variables': {
+             # This library uses native JNI exports; tell GYP so that the
+             # required symbols will be kept.
+diff --git a/webrtc/api/api_java.gyp b/webrtc/api/api_java.gyp
+index e69f0e2..e9331fa 100644
+--- a/webrtc/api/api_java.gyp
++++ b/webrtc/api/api_java.gyp
+@@ -15,7 +15,7 @@
+ {
+   'includes': [ '../build/common.gypi', ],
+   'conditions': [
+-    ['OS=="android"', {
++    ['OS=="linux"', {
+       'targets': [
+         {
+           # |libjingle_peerconnection_java| builds a jar file with name
+@@ -31,17 +31,12 @@
+             # Designate as Chromium code and point to our lint settings to
+             # enable linting of the WebRTC code (this is the only way to make
+             # lint_action invoke the Android linter).
+-            'android_manifest_path': '<(webrtc_root)/build/android/AndroidManifest.xml',
+-            'suppressions_file': '<(webrtc_root)/build/android/suppressions.xml',
+-            'chromium_code': 1,
+             'java_in_dir': 'java',
+             'webrtc_base_dir': '<(webrtc_root)/base',
+             'webrtc_modules_dir': '<(webrtc_root)/modules',
+             'additional_src_dirs' : [
+-              'java/android',
++              'java/linux',
+               '<(webrtc_base_dir)/java/src',
+-              '<(webrtc_modules_dir)/audio_device/android/java/src',
+-
+             ],
+           },
+           'includes': ['../../build/java.gypi'],

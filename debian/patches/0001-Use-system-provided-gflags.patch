@@ -1,0 +1,49 @@
+From: George Hopkins <george-hopkins@null.net>
+Date: Sun, 26 Jun 2016 10:35:24 +0200
+Subject: Use system-provided gflags
+
+---
+ chromium/src/build/linux/unbundle/gflags.gyp        | 21 +++++++++++++++++++++
+ .../src/build/linux/unbundle/replace_gyp_files.py   |  1 +
+ 2 files changed, 22 insertions(+)
+ create mode 100644 chromium/src/build/linux/unbundle/gflags.gyp
+
+diff --git a/chromium/src/build/linux/unbundle/gflags.gyp b/chromium/src/build/linux/unbundle/gflags.gyp
+new file mode 100644
+index 0000000..bbc9d9c
+--- /dev/null
++++ b/chromium/src/build/linux/unbundle/gflags.gyp
+@@ -0,0 +1,21 @@
++{
++  'targets': [
++    {
++      'target_name': 'gflags',
++      'type': 'none',
++      'direct_dependent_settings': {
++        'cflags': [
++          '<!@(pkg-config --cflags libgflags)',
++        ],
++      },
++      'link_settings': {
++        'ldflags': [
++          '<!@(pkg-config --libs-only-L --libs-only-other libgflags)',
++        ],
++        'libraries': [
++          '<!@(pkg-config --libs-only-l libgflags)',
++        ],
++      },
++    },
++  ],
++}
+diff --git a/chromium/src/build/linux/unbundle/replace_gyp_files.py b/chromium/src/build/linux/unbundle/replace_gyp_files.py
+index d067ba4..d33744b 100755
+--- a/chromium/src/build/linux/unbundle/replace_gyp_files.py
++++ b/chromium/src/build/linux/unbundle/replace_gyp_files.py
+@@ -19,6 +19,7 @@ REPLACEMENTS = {
+   'use_system_expat': 'third_party/expat/expat.gyp',
+   'use_system_ffmpeg': 'third_party/ffmpeg/ffmpeg.gyp',
+   'use_system_flac': 'third_party/flac/flac.gyp',
++  'use_system_gflags': 'third_party/gflags/gflags.gyp',
+   'use_system_harfbuzz': 'third_party/harfbuzz-ng/harfbuzz.gyp',
+   'use_system_icu': 'third_party/icu/icu.gyp',
+   'use_system_jsoncpp': 'third_party/jsoncpp/jsoncpp.gyp',
