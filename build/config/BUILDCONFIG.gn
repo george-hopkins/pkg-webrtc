@@ -541,6 +541,9 @@ if (is_ios) {
   set_defaults("ios_app_bundle") {
     configs = _executable_configs
   }
+  set_defaults("ios_appex_bundle") {
+    configs = _executable_configs
+  }
 }
 
 # Static library defaults.
@@ -599,6 +602,12 @@ if (!is_component_build) {
   }
 }
 
+# TODO(brettw) move to //build/split_static_library.gni when set_defaults can
+# be practically implemented outside of this file.
+set_defaults("split_static_library") {
+  configs = _native_compiler_configs
+}
+
 # Test defaults.
 set_defaults("test") {
   if (is_android) {
@@ -630,18 +639,9 @@ template("component") {
     assert(invoker.static_component_type == "static_library" ||
            invoker.static_component_type == "source_set")
     _component_mode = invoker.static_component_type
-  } else if (!defined(invoker.sources) || is_mac ||
-             (is_win && is_official_build)) {
+  } else if (!defined(invoker.sources)) {
     # When there are no sources defined, use a source set to avoid creating
     # an empty static library (which generally don't work).
-    #
-    # On Windows official builds, the link time code generation bloats static
-    # libraries to the point where some of them become >32 bits large which
-    # causes lib.exe to fail. Always use source sets for that configuration.
-    #
-    # TODO(brettw) bug 618797: Remove the mac condition. On Mac making these as
-    # static_library causes crashes. Remove the mac condition above when this
-    # is fixed.
     _component_mode = "source_set"
   } else {
     _component_mode = "static_library"

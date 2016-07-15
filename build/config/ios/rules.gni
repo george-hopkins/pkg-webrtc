@@ -161,7 +161,6 @@ template("ios_app_bundle") {
     forward_variables_from(invoker,
                            "*",
                            [
-                             "assert_no_deps",
                              "bundle_extension",
                              "data_deps",
                              "entitlements_path",
@@ -173,6 +172,8 @@ template("ios_app_bundle") {
                            ])
 
     output_name = rebase_path("$target_gen_dir/$_output_name", root_out_dir)
+    output_prefix_override = true
+
     if (!defined(libs)) {
       libs = []
     }
@@ -376,6 +377,58 @@ template("bundle_data_xib") {
   }
 }
 
+# Compile a strings file and add it to a bundle_data so that it is available
+# at runtime in the bundle.
+#
+# Arguments
+#
+#   source:
+#       string, path of the strings file to compile.
+#
+#   output:
+#       string, path of the compiled file in the final bundle.
+#
+# Forwards all variables to the bundle_data target.
+template("bundle_data_strings") {
+  assert(defined(invoker.source), "source needs to be defined for $target_name")
+  assert(defined(invoker.output), "output needs to be defined for $target_name")
+
+  _source_extension = get_path_info(invoker.source, "extension")
+  assert(_source_extension == "strings",
+         "source must be a .strings for $target_name")
+
+  _target_name = target_name
+  _convert_target = target_name + "_compile_strings"
+
+  convert_plist(_convert_target) {
+    visibility = [ ":$_target_name" ]
+    source = invoker.source
+    output =
+        "$target_gen_dir/$_target_name/" + get_path_info(invoker.source, "file")
+    format = "binary1"
+  }
+
+  bundle_data(_target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "source",
+                             "output",
+                           ])
+
+    if (!defined(public_deps)) {
+      public_deps = []
+    }
+    public_deps += [ ":$_convert_target" ]
+
+    sources = get_target_outputs(":$_convert_target")
+
+    outputs = [
+      invoker.output,
+    ]
+  }
+}
+
 # Template to package a shared library into an iOS framework bundle.
 #
 # This template provides two targets to control whether the framework is
@@ -449,8 +502,8 @@ template("ios_framework_bundle") {
 
       args = [
                rebase_path(_header_map_filename),
-               rebase_path(_framework_root, root_out_dir),
-             ] + rebase_path(sources, root_out_dir)
+               rebase_path(_framework_root, root_build_dir),
+             ] + rebase_path(sources, root_build_dir)
     }
 
     _create_module_map_target = _target_name + "_module_map"
@@ -460,7 +513,7 @@ template("ios_framework_bundle") {
       outputs = [
         "$_framework_root/Modules/module.modulemap",
       ]
-      args = [ rebase_path("$_framework_root", root_out_dir) ]
+      args = [ rebase_path("$_framework_root", root_build_dir) ]
     }
 
     _copy_public_headers_target = _target_name + "_copy_public_headers"
@@ -495,7 +548,7 @@ template("ios_framework_bundle") {
   config(_framework_public_config) {
     visibility = [ ":$_framework_public_config" ]
     if (defined(_public_headers)) {
-      common_flags = [ "-F" + rebase_path("$root_out_dir/.", root_out_dir) ]
+      common_flags = [ "-F" + rebase_path("$root_out_dir/.", root_build_dir) ]
       cflags_objc = common_flags
       cflags_objcc = common_flags
     }
