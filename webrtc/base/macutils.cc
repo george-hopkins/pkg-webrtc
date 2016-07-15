@@ -83,7 +83,7 @@ static bool GetGestalt(OSType ostype, int* value) {
   return false;
 }
 
-bool GetOSVersion(int* major, int* minor, int* bugfix) {
+static bool GetOSVersion(int* major, int* minor, int* bugfix) {
   ASSERT(major && minor && bugfix);
   if (!GetGestalt(gestaltSystemVersion, major)) {
     return false;
@@ -127,18 +127,6 @@ MacOSVersionName GetOSVersionName() {
       return kMacOSMavericks;
   }
   return kMacOSNewer;
-}
-
-bool GetQuickTimeVersion(std::string* out) {
-  int ver;
-  if (!GetGestalt(gestaltQuickTimeVersion, &ver)) {
-    return false;
-  }
-
-  std::stringstream ss;
-  ss << std::hex << ver;
-  *out = ss.str();
-  return true;
 }
 
 bool RunAppleScript(const std::string& script) {

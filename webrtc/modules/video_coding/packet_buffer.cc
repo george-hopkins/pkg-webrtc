@@ -16,14 +16,17 @@
 #include "webrtc/base/checks.h"
 #include "webrtc/base/logging.h"
 #include "webrtc/modules/video_coding/frame_object.h"
+#include "webrtc/system_wrappers/include/clock.h"
 
 namespace webrtc {
 namespace video_coding {
 
-PacketBuffer::PacketBuffer(size_t start_buffer_size,
+PacketBuffer::PacketBuffer(Clock* clock,
+                           size_t start_buffer_size,
                            size_t max_buffer_size,
                            OnCompleteFrameCallback* frame_callback)
-    : size_(start_buffer_size),
+    : clock_(clock),
+      size_(start_buffer_size),
       max_size_(max_buffer_size),
       first_seq_num_(0),
       last_seq_num_(0),
@@ -65,6 +68,12 @@ bool PacketBuffer::InsertPacket(const VCMPacket& packet) {
 
   if (AheadOf(seq_num, last_seq_num_))
     last_seq_num_ = seq_num;
+
+  // If this is a padding or FEC packet, don't insert it.
+  if (packet.sizeBytes == 0) {
+    reference_finder_.PaddingReceived(packet.seqNum);
+    return true;
+  }
 
   sequence_buffer_[index].frame_begin = packet.isFirstPacket;
   sequence_buffer_[index].frame_end = packet.markerBit;
@@ -157,8 +166,9 @@ void PacketBuffer::FindFrames(uint16_t seq_num) {
         start_seq_num--;
       }
 
-      std::unique_ptr<RtpFrameObject> frame(new RtpFrameObject(
-          this, start_seq_num, seq_num, frame_size, max_nack_count));
+      std::unique_ptr<RtpFrameObject> frame(
+          new RtpFrameObject(this, start_seq_num, seq_num, frame_size,
+                             max_nack_count, clock_->TimeInMilliseconds()));
       reference_finder_.ManageFrame(std::move(frame));
     }
 

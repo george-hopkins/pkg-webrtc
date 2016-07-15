@@ -31,6 +31,7 @@
 #include "webrtc/modules/audio_processing/gain_control_impl.h"
 #include "webrtc/modules/audio_processing/high_pass_filter_impl.h"
 #include "webrtc/modules/audio_processing/intelligibility/intelligibility_enhancer.h"
+#include "webrtc/modules/audio_processing/level_controller/level_controller.h"
 #include "webrtc/modules/audio_processing/level_estimator_impl.h"
 #include "webrtc/modules/audio_processing/noise_suppression_impl.h"
 #include "webrtc/modules/audio_processing/transient/transient_suppressor.h"
@@ -127,11 +128,12 @@ struct AudioProcessingImpl::ApmPublicSubmodules {
 };
 
 struct AudioProcessingImpl::ApmPrivateSubmodules {
-  explicit ApmPrivateSubmodules(Beamformer<float>* beamformer)
+  explicit ApmPrivateSubmodules(NonlinearBeamformer* beamformer)
       : beamformer(beamformer) {}
   // Accessed internally from capture or during initialization
-  std::unique_ptr<Beamformer<float>> beamformer;
+  std::unique_ptr<NonlinearBeamformer> beamformer;
   std::unique_ptr<AgcManagerDirect> agc_manager;
+  std::unique_ptr<LevelController> level_controller;
 };
 
 AudioProcessing* AudioProcessing::Create() {
@@ -144,7 +146,7 @@ AudioProcessing* AudioProcessing::Create(const Config& config) {
 }
 
 AudioProcessing* AudioProcessing::Create(const Config& config,
-                                         Beamformer<float>* beamformer) {
+                                         NonlinearBeamformer* beamformer) {
   AudioProcessingImpl* apm = new AudioProcessingImpl(config, beamformer);
   if (apm->Initialize() != kNoError) {
     delete apm;
@@ -158,7 +160,7 @@ AudioProcessingImpl::AudioProcessingImpl(const Config& config)
     : AudioProcessingImpl(config, nullptr) {}
 
 AudioProcessingImpl::AudioProcessingImpl(const Config& config,
-                                         Beamformer<float>* beamformer)
+                                         NonlinearBeamformer* beamformer)
     : public_submodules_(new ApmPublicSubmodules()),
       private_submodules_(new ApmPrivateSubmodules(beamformer)),
       constants_(config.Get<ExperimentalAgc>().startup_min_volume,
@@ -175,8 +177,8 @@ AudioProcessingImpl::AudioProcessingImpl(const Config& config,
                config.Get<Beamforming>().array_geometry,
                config.Get<Beamforming>().target_direction),
       capture_nonlocked_(config.Get<Beamforming>().enabled,
-                         config.Get<Intelligibility>().enabled)
-{
+                         config.Get<Intelligibility>().enabled,
+                         config.Get<LevelControl>().enabled) {
   {
     rtc::CritScope cs_render(&crit_render_);
     rtc::CritScope cs_capture(&crit_capture_);
@@ -198,6 +200,8 @@ AudioProcessingImpl::AudioProcessingImpl(const Config& config,
     public_submodules_->gain_control_for_experimental_agc.reset(
         new GainControlForExperimentalAgc(
             public_submodules_->gain_control.get(), &crit_capture_));
+
+    private_submodules_->level_controller.reset(new LevelController());
   }
 
   SetExtraOptions(config);
@@ -322,6 +326,7 @@ int AudioProcessingImpl::InitializeLocked() {
   InitializeNoiseSuppression();
   InitializeLevelEstimator();
   InitializeVoiceDetection();
+  InitializeLevelController();
 
 #ifdef WEBRTC_AUDIOPROC_DEBUG_DUMP
   if (debug_dump_.debug_file->is_open()) {
@@ -406,6 +411,16 @@ void AudioProcessingImpl::SetExtraOptions(const Config& config) {
     capture_.transient_suppressor_enabled =
         config.Get<ExperimentalNs>().enabled;
     InitializeTransient();
+  }
+
+  if (capture_nonlocked_.level_controller_enabled !=
+      config.Get<LevelControl>().enabled) {
+    capture_nonlocked_.level_controller_enabled =
+        config.Get<LevelControl>().enabled;
+    LOG(LS_INFO) << "Level controller activated: "
+                 << config.Get<LevelControl>().enabled;
+
+    InitializeLevelController();
   }
 
   if(capture_nonlocked_.intelligibility_enabled !=
@@ -684,8 +699,8 @@ int AudioProcessingImpl::ProcessStreamLocked() {
   }
 
   if (capture_nonlocked_.beamformer_enabled) {
-    private_submodules_->beamformer->ProcessChunk(*ca->split_data_f(),
-                                                  ca->split_data_f());
+    private_submodules_->beamformer->AnalyzeChunk(*ca->split_data_f());
+    // Discards all channels by the leftmost one.
     ca->set_num_channels(1);
   }
 
@@ -713,8 +728,12 @@ int AudioProcessingImpl::ProcessStreamLocked() {
     int gain_db = public_submodules_->gain_control->is_enabled() ?
                   public_submodules_->gain_control->compression_gain_db() :
                   0;
+    float gain = std::pow(10.f, gain_db / 20.f);
+    gain *= capture_nonlocked_.level_controller_enabled ?
+            private_submodules_->level_controller->GetLastGain() :
+            1.f;
     public_submodules_->intelligibility_enhancer->SetCaptureNoiseEstimate(
-        public_submodules_->noise_suppression->NoiseEstimate(), gain_db);
+        public_submodules_->noise_suppression->NoiseEstimate(), gain);
   }
 
   // Ensure that the stream delay was set before the call to the
@@ -726,6 +745,10 @@ int AudioProcessingImpl::ProcessStreamLocked() {
 
   RETURN_ON_ERR(public_submodules_->echo_control_mobile->ProcessCaptureAudio(
       ca, stream_delay_ms()));
+
+  if (capture_nonlocked_.beamformer_enabled) {
+    private_submodules_->beamformer->PostFilter(ca->split_data_f());
+  }
 
   public_submodules_->voice_detection->ProcessCaptureAudio(ca);
 
@@ -757,6 +780,10 @@ int AudioProcessingImpl::ProcessStreamLocked() {
         ca->split_bands_const_f(0)[kBand0To8kHz], ca->num_frames_per_band(),
         ca->keyboard_data(), ca->num_keyboard_frames(), voice_probability,
         capture_.key_pressed);
+  }
+
+  if (capture_nonlocked_.level_controller_enabled) {
+    private_submodules_->level_controller->Process(ca);
   }
 
   // The level estimator operates on the recombined data.
@@ -1118,7 +1145,8 @@ bool AudioProcessingImpl::output_copy_needed() const {
   // Check if we've upmixed or downmixed the audio.
   return ((formats_.api_format.output_stream().num_channels() !=
            formats_.api_format.input_stream().num_channels()) ||
-          is_fwd_processed() || capture_.transient_suppressor_enabled);
+          is_fwd_processed() || capture_.transient_suppressor_enabled ||
+          capture_nonlocked_.level_controller_enabled);
 }
 
 bool AudioProcessingImpl::fwd_synthesis_needed() const {
@@ -1199,7 +1227,7 @@ void AudioProcessingImpl::InitializeBeamformer() {
   if (capture_nonlocked_.beamformer_enabled) {
     if (!private_submodules_->beamformer) {
       private_submodules_->beamformer.reset(new NonlinearBeamformer(
-          capture_.array_geometry, capture_.target_direction));
+          capture_.array_geometry, 1u, capture_.target_direction));
     }
     private_submodules_->beamformer->Initialize(kChunkSizeMs,
                                                 capture_nonlocked_.split_rate);
@@ -1245,6 +1273,10 @@ void AudioProcessingImpl::InitializeEchoControlMobile() {
 
 void AudioProcessingImpl::InitializeLevelEstimator() {
   public_submodules_->level_estimator->Initialize();
+}
+
+void AudioProcessingImpl::InitializeLevelController() {
+  private_submodules_->level_controller->Initialize(proc_sample_rate_hz());
 }
 
 void AudioProcessingImpl::InitializeVoiceDetection() {
@@ -1441,6 +1473,9 @@ int AudioProcessingImpl::WriteConfigMessage(bool forced) {
       public_submodules_->echo_cancellation->GetExperimentsDescription();
   // TODO(peah): Add semicolon-separated concatenations of experiment
   // descriptions for other submodules.
+  if (capture_nonlocked_.level_controller_enabled) {
+    experiments_description += "LevelController;";
+  }
   config.set_experiments_description(experiments_description);
 
   std::string serialized_config = config.SerializeAsString();

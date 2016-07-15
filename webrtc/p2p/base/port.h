@@ -123,6 +123,7 @@ class Port : public PortInterface, public rtc::MessageHandler,
              public sigslot::has_slots<> {
  public:
   Port(rtc::Thread* thread,
+       const std::string& type,
        rtc::PacketSocketFactory* factory,
        rtc::Network* network,
        const rtc::IPAddress& ip,
@@ -362,8 +363,6 @@ class Port : public PortInterface, public rtc::MessageHandler,
     return ice_role_ == ICEROLE_CONTROLLED && connections_.empty();
   }
 
-  void OnNetworkInactive(const rtc::Network* network);
-
   void OnNetworkTypeChanged(const rtc::Network* network);
 
   rtc::Thread* thread_;
@@ -460,10 +459,6 @@ class Connection : public CandidatePairInterface,
   bool weak() const { return !(writable() && receiving() && connected()); }
   bool active() const {
     return write_state_ != STATE_WRITE_TIMEOUT;
-  }
-  virtual bool ReadyToSendMedia() const {
-    return write_state_ == STATE_WRITABLE ||
-           write_state_ == STATE_WRITE_UNRELIABLE;
   }
 
   // A connection is dead if it can be safely deleted.
@@ -595,8 +590,12 @@ class Connection : public CandidatePairInterface,
   // Returns the last received time of any data, stun request, or stun
   // response in milliseconds
   int64_t last_received() const;
+  // Returns the last time when the connection changed its receiving state.
+  int64_t receiving_unchanged_since() const {
+    return receiving_unchanged_since_;
+  }
 
-  bool stable(int64_t now);
+  bool stable(int64_t now) const;
 
  protected:
   enum { MSG_DELETE = 0, MSG_FIRST_AVAILABLE };
@@ -615,15 +614,15 @@ class Connection : public CandidatePairInterface,
   void OnConnectionRequestTimeout(ConnectionRequest* req);
   void OnConnectionRequestSent(ConnectionRequest* req);
 
-  bool rtt_converged();
+  bool rtt_converged() const;
 
   // If the response is not received within 2 * RTT, the response is assumed to
   // be missing.
-  bool missing_responses(int64_t now);
+  bool missing_responses(int64_t now) const;
 
   // Changes the state and signals if necessary.
   void set_write_state(WriteState value);
-  void set_receiving(bool value);
+  void UpdateReceiving(int64_t now);
   void set_state(State state);
   void set_connected(bool value);
 
@@ -653,6 +652,7 @@ class Connection : public CandidatePairInterface,
                                 // side
   int64_t last_data_received_;
   int64_t last_ping_response_received_;
+  int64_t receiving_unchanged_since_ = 0;
   std::vector<SentPing> pings_since_last_response_;
 
   rtc::RateTracker recv_rate_tracker_;

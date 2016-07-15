@@ -14,11 +14,11 @@
 #include <set>
 #include <utility>
 
-#include "webrtc/modules/video_coding/frame_object.h"
-#include "webrtc/modules/video_coding/packet_buffer.h"
-
 #include "testing/gtest/include/gtest/gtest.h"
 #include "webrtc/base/random.h"
+#include "webrtc/modules/video_coding/frame_object.h"
+#include "webrtc/modules/video_coding/packet_buffer.h"
+#include "webrtc/system_wrappers/include/clock.h"
 
 namespace webrtc {
 namespace video_coding {
@@ -28,8 +28,13 @@ class TestPacketBuffer : public ::testing::Test,
  protected:
   TestPacketBuffer()
       : rand_(0x8739211),
-        packet_buffer_(new PacketBuffer(kStartSize, kMaxSize, this)),
-        frames_from_callback_(FrameComp()) {}
+        clock_(new SimulatedClock(0)),
+        packet_buffer_(new PacketBuffer(clock_.get(),
+                       kStartSize,
+                       kMaxSize,
+                       this)),
+        frames_from_callback_(FrameComp()),
+        dummy_data_(new uint8_t[kDummyDataSize]()) {}
 
   uint16_t Rand() { return rand_.Rand(std::numeric_limits<uint16_t>::max()); }
 
@@ -61,12 +66,17 @@ class TestPacketBuffer : public ::testing::Test,
   };
 
   // Insert a generic packet into the packet buffer.
-  void InsertGeneric(uint16_t seq_num,              // packet sequence number
-                     bool keyframe,                 // is keyframe
-                     bool first,                    // is first packet of frame
-                     bool last,                     // is last packet of frame
-                     size_t data_size = 0,          // size of data
-                     uint8_t* data = nullptr) {     // data pointer
+  void InsertGeneric(uint16_t seq_num,           // packet sequence number
+                     bool keyframe,              // is keyframe
+                     bool first,                 // is first packet of frame
+                     bool last,                  // is last packet of frame
+                     int data_size = -1,         // size of data
+                     uint8_t* data = nullptr) {  // data pointer
+    if (data_size == -1) {
+      data_size = kDummyDataSize;
+      data = dummy_data_.get();
+    }
+
     VCMPacket packet;
     packet.codec = kVideoCodecGeneric;
     packet.seqNum = seq_num;
@@ -88,8 +98,13 @@ class TestPacketBuffer : public ::testing::Test,
                  int32_t pid = kNoPictureId,    // picture id
                  uint8_t tid = kNoTemporalIdx,  // temporal id
                  int32_t tl0 = kNoTl0PicIdx,    // tl0 pic index
-                 size_t data_size = 0,          // size of data
+                 int data_size = -1,            // size of data
                  uint8_t* data = nullptr) {     // data pointer
+    if (data_size == -1) {
+      data_size = kDummyDataSize;
+      data = dummy_data_.get();
+    }
+
     VCMPacket packet;
     packet.codec = kVideoCodecVP8;
     packet.seqNum = seq_num;
@@ -117,8 +132,13 @@ class TestPacketBuffer : public ::testing::Test,
                     uint8_t tid = kNoTemporalIdx,  // temporal id
                     int32_t tl0 = kNoTl0PicIdx,    // tl0 pic index
                     GofInfoVP9* ss = nullptr,      // scalability structure
-                    size_t data_size = 0,          // size of data
+                    int data_size = -1,            // size of data
                     uint8_t* data = nullptr) {     // data pointer
+    if (data_size == -1) {
+      data_size = kDummyDataSize;
+      data = dummy_data_.get();
+    }
+
     VCMPacket packet;
     packet.codec = kVideoCodecVP9;
     packet.seqNum = seq_num;
@@ -142,19 +162,24 @@ class TestPacketBuffer : public ::testing::Test,
   }
 
   // Insert a Vp9 packet into the packet buffer.
-  void InsertVp9Flex(uint16_t seq_num,              // packet sequence number
-                     bool keyframe,                 // is keyframe
-                     bool first,                    // is first packet of frame
-                     bool last,                     // is last packet of frame
-                     bool inter,                    // depends on S-1 layer
-                     int32_t pid = kNoPictureId,    // picture id
-                     uint8_t sid = kNoSpatialIdx,   // spatial id
-                     uint8_t tid = kNoTemporalIdx,  // temporal id
-                     int32_t tl0 = kNoTl0PicIdx,    // tl0 pic index
-                     std::vector<uint8_t> refs =
-                       std::vector<uint8_t>(),      // frame references
-                     size_t data_size = 0,          // size of data
-                     uint8_t* data = nullptr) {     // data pointer
+  void InsertVp9Flex(
+      uint16_t seq_num,              // packet sequence number
+      bool keyframe,                 // is keyframe
+      bool first,                    // is first packet of frame
+      bool last,                     // is last packet of frame
+      bool inter,                    // depends on S-1 layer
+      int32_t pid = kNoPictureId,    // picture id
+      uint8_t sid = kNoSpatialIdx,   // spatial id
+      uint8_t tid = kNoTemporalIdx,  // temporal id
+      int32_t tl0 = kNoTl0PicIdx,    // tl0 pic index
+      std::vector<uint8_t> refs = std::vector<uint8_t>(),  // frame references
+      int data_size = -1,                                  // size of data
+      uint8_t* data = nullptr) {                           // data pointer
+    if (data_size == -1) {
+      data_size = kDummyDataSize;
+      data = dummy_data_.get();
+    }
+
     VCMPacket packet;
     packet.codec = kVideoCodecVP9;
     packet.seqNum = seq_num;
@@ -224,8 +249,10 @@ class TestPacketBuffer : public ::testing::Test,
 
   const int kStartSize = 16;
   const int kMaxSize = 64;
+  const int kDummyDataSize = 4;
 
   Random rand_;
+  std::unique_ptr<Clock> clock_;
   std::unique_ptr<PacketBuffer> packet_buffer_;
   struct FrameComp {
     bool operator()(const std::pair<uint16_t, uint8_t> f1,
@@ -238,6 +265,8 @@ class TestPacketBuffer : public ::testing::Test,
   std::map<std::pair<uint16_t, uint8_t>,
            std::unique_ptr<FrameObject>,
            FrameComp> frames_from_callback_;
+
+  std::unique_ptr<uint8_t[]> dummy_data_;
 };
 
 TEST_F(TestPacketBuffer, InsertOnePacket) {
@@ -274,8 +303,8 @@ TEST_F(TestPacketBuffer, NackCount) {
   packet.frameType = kVideoFrameKey;
   packet.isFirstPacket = true;
   packet.markerBit = false;
-  packet.sizeBytes = 0;
-  packet.dataPtr = nullptr;
+  packet.dataPtr = dummy_data_.get();
+  packet.sizeBytes = kDummyDataSize;
   packet.timesNacked = 0;
 
   packet_buffer_->InsertPacket(packet);
@@ -378,6 +407,8 @@ TEST_F(TestPacketBuffer, GenericThreePacketReorderingOneFrame) {
 TEST_F(TestPacketBuffer, DiscardOldPacket) {
   uint16_t seq_num = Rand();
   VCMPacket packet;
+  packet.dataPtr = dummy_data_.get();
+  packet.sizeBytes = kDummyDataSize;
   packet.seqNum = Rand();
   EXPECT_TRUE(packet_buffer_->InsertPacket(packet));
   packet.seqNum += 2;
@@ -397,6 +428,8 @@ TEST_F(TestPacketBuffer, DiscardOldPacket) {
 TEST_F(TestPacketBuffer, DiscardMultipleOldPackets) {
   uint16_t seq_num = Rand();
   VCMPacket packet;
+  packet.dataPtr = dummy_data_.get();
+  packet.sizeBytes = kDummyDataSize;
   packet.seqNum = seq_num;
   EXPECT_TRUE(packet_buffer_->InsertPacket(packet));
   packet.seqNum += 2;
@@ -472,9 +505,7 @@ TEST_F(TestPacketBuffer, GetBitstreamFromFrame) {
   CheckReferencesVp8(seq_num + 3);
   EXPECT_TRUE(frames_from_callback_[std::make_pair(seq_num + 3, 0)]->
                                                           GetBitstream(result));
-  EXPECT_EQ(std::strcmp("many bitstream, such data",
-            reinterpret_cast<char*>(result)),
-            0);
+  EXPECT_EQ(memcmp(result, "many bitstream, such data", sizeof(result)), 0);
 }
 
 TEST_F(TestPacketBuffer, FreeSlotsOnFrameDestruction) {
@@ -515,6 +546,8 @@ TEST_F(TestPacketBuffer, Clear) {
 
 TEST_F(TestPacketBuffer, InvalidateFrameByClearing) {
   VCMPacket packet;
+  packet.dataPtr = dummy_data_.get();
+  packet.sizeBytes = kDummyDataSize;
   packet.codec = kVideoCodecGeneric;
   packet.frameType = kVideoFrameKey;
   packet.isFirstPacket = kT;
@@ -525,6 +558,49 @@ TEST_F(TestPacketBuffer, InvalidateFrameByClearing) {
 
   packet_buffer_->Clear();
   EXPECT_FALSE(frames_from_callback_.begin()->second->GetBitstream(nullptr));
+}
+
+TEST_F(TestPacketBuffer, PaddingPackets) {
+  uint16_t seq_num = Rand();
+
+  //            seq_num    , kf, frst, lst
+  InsertGeneric(seq_num    , kT, kT  , kT);
+  InsertGeneric(seq_num + 1, kF, kF  , kF, 0, nullptr);
+  InsertGeneric(seq_num + 3, kF, kT  , kT);
+  EXPECT_EQ(1UL, frames_from_callback_.size());
+  InsertGeneric(seq_num + 2, kF, kF  , kF, 0, nullptr);
+  EXPECT_EQ(2UL, frames_from_callback_.size());
+}
+
+TEST_F(TestPacketBuffer, PaddingPacketsReordered) {
+  uint16_t seq_num = Rand();
+
+  //            seq_num    , kf, frst, lst
+  InsertGeneric(seq_num    , kT, kT  , kT);
+  InsertGeneric(seq_num + 1, kF, kF  , kF, 0, nullptr);
+  InsertGeneric(seq_num + 2, kF, kT  , kF);
+  InsertGeneric(seq_num + 4, kF, kF  , kF, 0, nullptr);
+  InsertGeneric(seq_num + 3, kF, kF  , kT);
+  EXPECT_EQ(2UL, frames_from_callback_.size());
+  CheckReferencesGeneric(seq_num);
+  CheckReferencesGeneric(seq_num + 3, seq_num);
+}
+
+TEST_F(TestPacketBuffer, PaddingPacketsReorderedMultipleKeyframes) {
+  uint16_t seq_num = Rand();
+
+  //            seq_num    , kf, frst, lst
+  InsertGeneric(seq_num    , kT, kT  , kT);
+  InsertGeneric(seq_num + 2, kF, kT  , kF);
+  InsertGeneric(seq_num + 1, kF, kF  , kF, 0, nullptr);
+  InsertGeneric(seq_num + 4, kF, kF  , kF, 0, nullptr);
+  InsertGeneric(seq_num + 5, kT, kT  , kT);
+  InsertGeneric(seq_num + 3, kF, kF  , kT);
+  InsertGeneric(seq_num + 6, kF, kF  , kF, 0, nullptr);
+  InsertGeneric(seq_num + 9, kF, kF  , kF, 0, nullptr);
+  InsertGeneric(seq_num + 8, kF, kF  , kT);
+  InsertGeneric(seq_num + 7, kF, kT  , kF);
+  EXPECT_EQ(4UL, frames_from_callback_.size());
 }
 
 TEST_F(TestPacketBuffer, Vp8NoPictureId) {
@@ -858,7 +934,7 @@ TEST_F(TestPacketBuffer, Vp8LayerSync) {
 }
 
 TEST_F(TestPacketBuffer, Vp8InsertLargeFrames) {
-  packet_buffer_.reset(new PacketBuffer(1 << 3, 1 << 12, this));
+  packet_buffer_.reset(new PacketBuffer(clock_.get(), 1 << 3, 1 << 12, this));
   uint16_t pid = Rand();
   uint16_t seq_num = Rand();
 
@@ -1040,6 +1116,83 @@ TEST_F(TestPacketBuffer, Vp9GofTemporalLayersReordered_0) {
   CheckReferencesVp9(pid + 17, 0, pid + 16);
   CheckReferencesVp9(pid + 18, 0, pid + 17);
   CheckReferencesVp9(pid + 19, 0, pid + 18);
+}
+
+TEST_F(TestPacketBuffer, Vp9GofSkipFramesTemporalLayers_01) {
+  uint16_t pid = Rand();
+  uint16_t sn = Rand();
+  GofInfoVP9 ss;
+  ss.SetGofInfoVP9(kTemporalStructureMode2);  // 0101 pattern
+
+  //           sn     , kf, frst, lst, up, pid     , sid, tid, tl0, ss
+  InsertVp9Gof(sn     , kT, kT  , kT , kF, pid     , 0  , 0  , 0  , &ss);
+  InsertVp9Gof(sn + 1 , kF, kT  , kT , kF, pid + 1 , 0  , 1  , 0);
+  // Skip GOF with tl0 1
+  InsertVp9Gof(sn + 4 , kT, kT  , kT , kF, pid + 4 , 0  , 0  , 2  , &ss);
+  InsertVp9Gof(sn + 5 , kF, kT  , kT , kF, pid + 5 , 0  , 1  , 2);
+  // Skip GOF with tl0 3
+  // Skip GOF with tl0 4
+  InsertVp9Gof(sn + 10, kF, kT  , kT , kF, pid + 10, 0  , 0  , 5  , &ss);
+  InsertVp9Gof(sn + 11, kF, kT  , kT , kF, pid + 11, 0  , 1  , 5);
+
+  ASSERT_EQ(6UL, frames_from_callback_.size());
+  CheckReferencesVp9(pid, 0);
+  CheckReferencesVp9(pid + 1 , 0, pid);
+  CheckReferencesVp9(pid + 4 , 0);
+  CheckReferencesVp9(pid + 5 , 0, pid + 4);
+  CheckReferencesVp9(pid + 10, 0, pid + 8);
+  CheckReferencesVp9(pid + 11, 0, pid + 10);
+}
+
+TEST_F(TestPacketBuffer, Vp9GofSkipFramesTemporalLayers_0212) {
+  uint16_t pid = Rand();
+  uint16_t sn = Rand();
+  GofInfoVP9 ss;
+  ss.SetGofInfoVP9(kTemporalStructureMode3);  // 02120212 pattern
+
+  //           sn     , kf, frst, lst, up, pid     , sid, tid, tl0, ss
+  InsertVp9Gof(sn     , kT, kT  , kT , kF, pid     , 0  , 0  , 0  , &ss);
+  InsertVp9Gof(sn + 1 , kF, kT  , kT , kF, pid + 1 , 0  , 2  , 0);
+  InsertVp9Gof(sn + 2 , kF, kT  , kT , kF, pid + 2 , 0  , 1  , 0);
+  InsertVp9Gof(sn + 3 , kF, kT  , kT , kF, pid + 3 , 0  , 2  , 0);
+
+  ASSERT_EQ(4UL, frames_from_callback_.size());
+  CheckReferencesVp9(pid, 0);
+  CheckReferencesVp9(pid + 1 , 0, pid);
+  CheckReferencesVp9(pid + 2 , 0, pid);
+  CheckReferencesVp9(pid + 3 , 0, pid + 1, pid + 2);
+
+  // Skip frames with tl0 = 1
+
+  //           sn     , kf, frst, lst, up, pid     , sid, tid, tl0, ss
+  InsertVp9Gof(sn + 8 , kT, kT  , kT , kF, pid + 8 , 0  , 0  , 2  , &ss);
+  InsertVp9Gof(sn + 9 , kF, kT  , kT , kF, pid + 9 , 0  , 2  , 2);
+  InsertVp9Gof(sn + 10, kF, kT  , kT , kF, pid + 10, 0  , 1  , 2);
+  InsertVp9Gof(sn + 11, kF, kT  , kT , kF, pid + 11, 0  , 2  , 2);
+
+  ASSERT_EQ(8UL, frames_from_callback_.size());
+  CheckReferencesVp9(pid + 8, 0);
+  CheckReferencesVp9(pid + 9 , 0, pid + 8);
+  CheckReferencesVp9(pid + 10, 0, pid + 8);
+  CheckReferencesVp9(pid + 11, 0, pid + 9, pid + 10);
+
+  // Now insert frames with tl0 = 1
+  //           sn     , kf, frst, lst, up, pid     , sid, tid, tl0, ss
+  InsertVp9Gof(sn + 4 , kT, kT  , kT , kF, pid + 4 , 0  , 0  , 1  , &ss);
+  InsertVp9Gof(sn + 7 , kF, kT  , kT , kF, pid + 7 , 0  , 2  , 1);
+
+  ASSERT_EQ(9UL, frames_from_callback_.size());
+  CheckReferencesVp9(pid + 4, 0);
+
+  // Rest of frames belonging to tl0 = 1
+  //           sn     , kf, frst, lst, up, pid     , sid, tid, tl0, ss
+  InsertVp9Gof(sn + 5 , kF, kT  , kT , kF, pid + 5 , 0  , 2  , 1);
+  InsertVp9Gof(sn + 6 , kF, kT  , kT , kT, pid + 6 , 0  , 1  , 1);  // up-switch
+
+  ASSERT_EQ(12UL, frames_from_callback_.size());
+  CheckReferencesVp9(pid + 5 , 0, pid + 4);
+  CheckReferencesVp9(pid + 6 , 0, pid + 4);
+  CheckReferencesVp9(pid + 7 , 0, pid + 6);
 }
 
 TEST_F(TestPacketBuffer, Vp9GofTemporalLayers_01) {

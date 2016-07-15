@@ -87,9 +87,9 @@ class VideoSendStream : public webrtc::VideoSendStream,
   int GetPaddingNeededBps() const;
 
   // Implements BitrateAllocatorObserver.
-  void OnBitrateUpdated(uint32_t bitrate_bps,
-                        uint8_t fraction_loss,
-                        int64_t rtt) override;
+  uint32_t OnBitrateUpdated(uint32_t bitrate_bps,
+                            uint8_t fraction_loss,
+                            int64_t rtt) override;
 
  protected:
   // Implements webrtc::VCMProtectionCallback.
@@ -138,6 +138,8 @@ class VideoSendStream : public webrtc::VideoSendStream,
   rtc::CriticalSection encoder_settings_crit_;
   std::unique_ptr<EncoderSettings> pending_encoder_settings_
       GUARDED_BY(encoder_settings_crit_);
+  uint32_t encoder_max_bitrate_bps_ GUARDED_BY(encoder_settings_crit_);
+  uint32_t encoder_target_rate_bps_ GUARDED_BY(encoder_settings_crit_);
 
   enum class State {
     kStopped,  // VideoSendStream::Start has not yet been called.

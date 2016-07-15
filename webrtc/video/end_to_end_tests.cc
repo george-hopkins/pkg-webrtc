@@ -26,6 +26,7 @@
 #include "webrtc/modules/rtp_rtcp/include/rtp_rtcp.h"
 #include "webrtc/modules/rtp_rtcp/source/byte_io.h"
 #include "webrtc/modules/rtp_rtcp/source/rtcp_utility.h"
+#include "webrtc/modules/rtp_rtcp/source/rtp_utility.h"
 #include "webrtc/modules/video_coding/codecs/h264/include/h264.h"
 #include "webrtc/modules/video_coding/codecs/vp8/include/vp8.h"
 #include "webrtc/modules/video_coding/codecs/vp9/include/vp9.h"
@@ -790,13 +791,19 @@ void EndToEndTest::DecodesRetransmittedFrame(bool enable_rtx, bool enable_red) {
       }
 
       EXPECT_EQ(kVideoSendSsrcs[0], header.ssrc)
-          << "Payload type " << static_cast<int>(header.payloadType)
-          << " not expected.";
+          << "Unexpected packet length " << length
+          << ", header_length " << header.headerLength
+          << ", padding_length " << header.paddingLength
+          << ", timestamp " << header.timestamp
+          << ", expected timestamp " << retransmitted_timestamp_
+          << ", payload type " << static_cast<int>(header.payloadType);
       EXPECT_EQ(payload_type_, header.payloadType);
 
       // Found the final packet of the frame to inflict loss to, drop this and
       // expect a retransmission.
       if (header.markerBit && ++marker_bits_observed_ == kDroppedFrameNumber) {
+        // This should be the only dropped packet.
+        EXPECT_EQ(0u, retransmitted_timestamp_);
         retransmitted_timestamp_ = header.timestamp;
         return DROP_PACKET;
       }
@@ -1521,7 +1528,8 @@ class TransportFeedbackTester : public test::EndToEndTest {
       : EndToEndTest(::webrtc::EndToEndTest::kDefaultTimeoutMs),
         feedback_enabled_(feedback_enabled),
         num_video_streams_(num_video_streams),
-        num_audio_streams_(num_audio_streams) {
+        num_audio_streams_(num_audio_streams),
+        receiver_call_(nullptr) {
     // Only one stream of each supported for now.
     EXPECT_LE(num_video_streams, 1u);
     EXPECT_LE(num_audio_streams, 1u);
@@ -2467,7 +2475,14 @@ TEST_F(EndToEndTest, ReportsSetEncoderRates) {
     void PerformTest() override {
       ASSERT_TRUE(Wait())
           << "Timed out while waiting for encoder SetRates() call.";
-      // Wait for GetStats to report a corresponding bitrate.
+      WaitForEncoderTargetBitrateMatchStats();
+      send_stream_->Stop();
+      WaitForStatsReportZeroTargetBitrate();
+      send_stream_->Start();
+      WaitForEncoderTargetBitrateMatchStats();
+    }
+
+    void WaitForEncoderTargetBitrateMatchStats() {
       for (int i = 0; i < kDefaultTimeoutMs; ++i) {
         VideoSendStream::Stats stats = send_stream_->GetStats();
         {
@@ -2481,6 +2496,16 @@ TEST_F(EndToEndTest, ReportsSetEncoderRates) {
       }
       FAIL()
           << "Timed out waiting for stats reporting the currently set bitrate.";
+    }
+
+    void WaitForStatsReportZeroTargetBitrate() {
+      for (int i = 0; i < kDefaultTimeoutMs; ++i) {
+        if (send_stream_->GetStats().target_media_bitrate_bps == 0) {
+          return;
+        }
+        SleepMs(1);
+      }
+      FAIL() << "Timed out waiting for stats reporting zero bitrate.";
     }
 
    private:
@@ -2516,6 +2541,16 @@ TEST_F(EndToEndTest, GetStats) {
 
    private:
     Action OnSendRtp(const uint8_t* packet, size_t length) override {
+      // Drop every 25th packet => 4% loss.
+      static const int kPacketLossFrac = 25;
+      RTPHeader header;
+      RtpUtility::RtpHeaderParser parser(packet, length);
+      if (parser.Parse(&header) &&
+          expected_send_ssrcs_.find(header.ssrc) !=
+              expected_send_ssrcs_.end() &&
+          header.sequenceNumber % kPacketLossFrac == 0) {
+        return DROP_PACKET;
+      }
       check_stats_event_.Set();
       return SEND_PACKET;
     }
@@ -2616,8 +2651,8 @@ TEST_F(EndToEndTest, GetStats) {
       for (std::map<uint32_t, VideoSendStream::StreamStats>::const_iterator it =
                stats.substreams.begin();
            it != stats.substreams.end(); ++it) {
-        EXPECT_TRUE(expected_send_ssrcs_.find(it->first) !=
-                    expected_send_ssrcs_.end());
+        if (expected_send_ssrcs_.find(it->first) == expected_send_ssrcs_.end())
+          continue;  // Probably RTX.
 
         send_stats_filled_[CompoundKey("CapturedFrameRate", it->first)] |=
             stats.input_frame_rate != 0;
@@ -2635,9 +2670,13 @@ TEST_F(EndToEndTest, GetStats) {
             stream_stats.rtp_stats.retransmitted.packets != 0 ||
             stream_stats.rtp_stats.transmitted.packets != 0;
 
-        send_stats_filled_[CompoundKey("BitrateStatisticsObserver",
+        send_stats_filled_[CompoundKey("BitrateStatisticsObserver.Total",
                                        it->first)] |=
             stream_stats.total_bitrate_bps != 0;
+
+        send_stats_filled_[CompoundKey("BitrateStatisticsObserver.Retransmit",
+                                       it->first)] |=
+            stream_stats.retransmit_bitrate_bps != 0;
 
         send_stats_filled_[CompoundKey("FrameCountObserver", it->first)] |=
             stream_stats.frame_counts.delta_frames != 0 ||
@@ -2669,10 +2708,8 @@ TEST_F(EndToEndTest, GetStats) {
     }
 
     bool AllStatsFilled(const std::map<std::string, bool>& stats_map) {
-      for (std::map<std::string, bool>::const_iterator it = stats_map.begin();
-           it != stats_map.end();
-           ++it) {
-        if (!it->second)
+      for (const auto& stat : stats_map) {
+        if (!stat.second)
           return false;
       }
       return true;
@@ -2695,8 +2732,17 @@ TEST_F(EndToEndTest, GetStats) {
         VideoSendStream::Config* send_config,
         std::vector<VideoReceiveStream::Config>* receive_configs,
         VideoEncoderConfig* encoder_config) override {
+      // Set low rates to avoid waiting for rampup.
+      for (size_t i = 0; i < encoder_config->streams.size(); ++i) {
+        encoder_config->streams[i].min_bitrate_bps = 10000;
+        encoder_config->streams[i].target_bitrate_bps = 15000;
+        encoder_config->streams[i].max_bitrate_bps = 20000;
+      }
       send_config->pre_encode_callback = this;  // Used to inject delay.
       expected_cname_ = send_config->rtp.c_name = "SomeCName";
+
+      send_config->rtp.nack.rtp_history_ms = kNackRtpHistoryMs;
+      send_config->rtp.rtx.payload_type = kSendRtxPayloadType;
 
       const std::vector<uint32_t>& ssrcs = send_config->rtp.ssrcs;
       for (size_t i = 0; i < ssrcs.size(); ++i) {
@@ -2705,7 +2751,17 @@ TEST_F(EndToEndTest, GetStats) {
             (*receive_configs)[i].rtp.remote_ssrc);
         (*receive_configs)[i].render_delay_ms = kExpectedRenderDelayMs;
         (*receive_configs)[i].renderer = &receive_stream_renderer_;
+        (*receive_configs)[i].rtp.nack.rtp_history_ms = kNackRtpHistoryMs;
+
+        (*receive_configs)[i].rtp.rtx[kFakeVideoSendPayloadType].ssrc =
+            kSendRtxSsrcs[i];
+        (*receive_configs)[i].rtp.rtx[kFakeVideoSendPayloadType].payload_type =
+            kSendRtxPayloadType;
       }
+
+      for (size_t i = 0; i < kNumSsrcs; ++i)
+        send_config->rtp.rtx.ssrcs.push_back(kSendRtxSsrcs[i]);
+
       // Use a delayed encoder to make sure we see CpuOveruseMetrics stats that
       // are non-zero.
       send_config->encoder_settings.encoder = &encoder_;
@@ -3097,14 +3153,9 @@ TEST_F(EndToEndTest, RestartingSendStreamPreservesRtpState) {
   TestRtpStatePreservation(false);
 }
 
-#if defined(WEBRTC_MAC)
-#define MAYBE_RestartingSendStreamPreservesRtpStatesWithRtx \
-  DISABLED_RestartingSendStreamPreservesRtpStatesWithRtx
-#else
-#define MAYBE_RestartingSendStreamPreservesRtpStatesWithRtx \
-  RestartingSendStreamPreservesRtpStatesWithRtx
-#endif
-TEST_F(EndToEndTest, MAYBE_RestartingSendStreamPreservesRtpStatesWithRtx) {
+// This test is flaky. See:
+// https://bugs.chromium.org/p/webrtc/issues/detail?id=4332
+TEST_F(EndToEndTest, DISABLED_RestartingSendStreamPreservesRtpStatesWithRtx) {
   TestRtpStatePreservation(true);
 }
 

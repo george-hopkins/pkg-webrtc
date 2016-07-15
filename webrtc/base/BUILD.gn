@@ -12,6 +12,11 @@ import("../build/webrtc.gni")
 
 import("//build_overrides/webrtc.gni")
 
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
 config("rtc_base_approved_all_dependent_config") {
   if (is_mac && !build_with_chromium) {
     libs = [ "Foundation.framework" ]  # needed for logging_mac.mm
@@ -132,8 +137,12 @@ static_library("rtc_base_approved") {
     "platform_thread.cc",
     "platform_thread.h",
     "platform_thread_types.h",
+    "race_checker.cc",
+    "race_checker.h",
     "random.cc",
     "random.h",
+    "rate_limiter.cc",
+    "rate_limiter.h",
     "rate_statistics.cc",
     "rate_statistics.h",
     "ratetracker.cc",
@@ -178,6 +187,10 @@ static_library("rtc_base_approved") {
   }
 }
 
+config("enable_libevent_config") {
+  defines = [ "WEBRTC_BUILD_LIBEVENT" ]
+}
+
 static_library("rtc_task_queue") {
   public_deps = [
     ":rtc_base_approved",
@@ -185,6 +198,9 @@ static_library("rtc_task_queue") {
   configs += [ "..:common_config" ]
 
   sources = [
+    "sequenced_task_checker.h",
+    "sequenced_task_checker_impl.cc",
+    "sequenced_task_checker_impl.h",
     "task_queue.h",
     "task_queue_posix.h",
   ]
@@ -200,6 +216,7 @@ static_library("rtc_task_queue") {
       "task_queue_libevent.cc",
       "task_queue_posix.cc",
     ]
+    all_dependent_configs = [ ":enable_libevent_config" ]
   } else {
     if (is_mac || is_ios) {
       sources += [
@@ -676,6 +693,20 @@ if (rtc_include_tests) {
     ]
     public_deps = [
       "//testing/gtest",
+    ]
+  }
+}
+
+if (is_android) {
+  android_library("base_java") {
+    java_files = [
+      "java/src/org/webrtc/Logging.java",
+      "java/src/org/webrtc/Size.java",
+      "java/src/org/webrtc/ThreadUtils.java",
+    ]
+
+    deps = [
+      "//base:base_java",
     ]
   }
 }

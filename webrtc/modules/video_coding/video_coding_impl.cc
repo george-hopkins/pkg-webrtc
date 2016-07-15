@@ -73,12 +73,11 @@ class VideoCodingModuleImpl : public VideoCodingModule {
  public:
   VideoCodingModuleImpl(Clock* clock,
                         EventFactory* event_factory,
-                        VideoEncoderRateObserver* encoder_rate_observer,
                         NackSender* nack_sender,
                         KeyFrameRequestSender* keyframe_request_sender,
                         EncodedImageCallback* pre_decode_image_callback)
       : VideoCodingModule(),
-        sender_(clock, &post_encode_callback_, encoder_rate_observer, nullptr),
+        sender_(clock, &post_encode_callback_, nullptr),
         receiver_(clock,
                   event_factory,
                   pre_decode_image_callback,
@@ -151,12 +150,6 @@ class VideoCodingModuleImpl : public VideoCodingModule {
   int32_t EnableFrameDropper(bool enable) override {
     return sender_.EnableFrameDropper(enable);
   }
-
-  void SuspendBelowMinBitrate() override {
-    return sender_.SuspendBelowMinBitrate();
-  }
-
-  bool VideoSuspended() const override { return sender_.VideoSuspended(); }
 
   int32_t RegisterReceiveCodec(const VideoCodec* receiveCodec,
                                int32_t numberOfCores,
@@ -269,29 +262,15 @@ void VideoCodingModule::Codec(VideoCodecType codecType, VideoCodec* codec) {
   VCMCodecDataBase::Codec(codecType, codec);
 }
 
-// Create method for current interface, will be removed when the
-// new jitter buffer is in place.
-VideoCodingModule* VideoCodingModule::Create(
-    Clock* clock,
-    VideoEncoderRateObserver* encoder_rate_observer,
-    VCMQMSettingsCallback* qm_settings_callback) {
-  return VideoCodingModule::Create(clock, encoder_rate_observer,
-                                   qm_settings_callback,
-                                   nullptr,   // NackSender
-                                   nullptr,   // KeyframeRequestSender
-                                   nullptr);  // Pre-decode image callback
-}
-
 // Create method for the new jitter buffer.
 VideoCodingModule* VideoCodingModule::Create(
     Clock* clock,
-    VideoEncoderRateObserver* encoder_rate_observer,
     VCMQMSettingsCallback* qm_settings_callback,
     NackSender* nack_sender,
     KeyFrameRequestSender* keyframe_request_sender,
     EncodedImageCallback* pre_decode_image_callback) {
-  return new VideoCodingModuleImpl(clock, nullptr, encoder_rate_observer,
-                                   nack_sender, keyframe_request_sender,
+  return new VideoCodingModuleImpl(clock, nullptr, nack_sender,
+                                   keyframe_request_sender,
                                    pre_decode_image_callback);
 }
 
@@ -312,7 +291,7 @@ VideoCodingModule* VideoCodingModule::Create(
     KeyFrameRequestSender* keyframe_request_sender) {
   assert(clock);
   assert(event_factory);
-  return new VideoCodingModuleImpl(clock, event_factory, nullptr, nack_sender,
+  return new VideoCodingModuleImpl(clock, event_factory, nack_sender,
                                    keyframe_request_sender, nullptr);
 }
 

@@ -10,14 +10,20 @@
 
 package org.appspot.apprtc;
 
+import org.appspot.apprtc.AppRTCClient.SignalingParameters;
+
 import android.content.Context;
-import android.os.ParcelFileDescriptor;
 import android.os.Environment;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
-import org.appspot.apprtc.AppRTCClient.SignalingParameters;
+import org.webrtc.AudioSource;
 import org.webrtc.AudioTrack;
+import org.webrtc.Camera1Enumerator;
+import org.webrtc.Camera2Enumerator;
 import org.webrtc.CameraEnumerationAndroid;
+import org.webrtc.CameraEnumerator;
+import org.webrtc.CameraVideoCapturer;
 import org.webrtc.DataChannel;
 import org.webrtc.EglBase;
 import org.webrtc.IceCandidate;
@@ -33,7 +39,7 @@ import org.webrtc.SdpObserver;
 import org.webrtc.SessionDescription;
 import org.webrtc.StatsObserver;
 import org.webrtc.StatsReport;
-import org.webrtc.VideoCapturerAndroid;
+import org.webrtc.VideoCapturer;
 import org.webrtc.VideoRenderer;
 import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
@@ -46,7 +52,6 @@ import java.util.EnumSet;
 import java.util.LinkedList;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.regex.Matcher;
@@ -93,9 +98,11 @@ public class PeerConnectionClient {
   private final SDPObserver sdpObserver = new SDPObserver();
   private final ScheduledExecutorService executor;
 
+  private Context context;
   private PeerConnectionFactory factory;
   private PeerConnection peerConnection;
   PeerConnectionFactory.Options options = null;
+  private AudioSource audioSource;
   private VideoSource videoSource;
   private boolean videoCallEnabled;
   private boolean preferIsac;
@@ -121,7 +128,7 @@ public class PeerConnectionClient {
   private SessionDescription localSdp; // either offer or answer SDP
   private MediaStream mediaStream;
   private int numberOfCameras;
-  private VideoCapturerAndroid videoCapturer;
+  private CameraVideoCapturer videoCapturer;
   // enableVideo is set to true if video should be rendered and sent.
   private boolean renderVideo;
   private VideoTrack localVideoTrack;
@@ -137,6 +144,7 @@ public class PeerConnectionClient {
     public final boolean videoCallEnabled;
     public final boolean loopback;
     public final boolean tracing;
+    public final boolean useCamera2;
     public final int videoWidth;
     public final int videoHeight;
     public final int videoFps;
@@ -152,13 +160,14 @@ public class PeerConnectionClient {
     public final boolean disableBuiltInAEC;
 
     public PeerConnectionParameters(
-        boolean videoCallEnabled, boolean loopback, boolean tracing,
-        int videoWidth, int videoHeight, int videoFps, int videoStartBitrate,
-        String videoCodec, boolean videoCodecHwAcceleration, boolean captureToTexture,
-        int audioStartBitrate, String audioCodec,
+        boolean videoCallEnabled, boolean loopback, boolean tracing, boolean useCamera2,
+        int videoWidth, int videoHeight, int videoFps,
+        int videoStartBitrate, String videoCodec, boolean videoCodecHwAcceleration,
+        boolean captureToTexture, int audioStartBitrate, String audioCodec,
         boolean noAudioProcessing, boolean aecDump, boolean useOpenSLES,
         boolean disableBuiltInAEC) {
       this.videoCallEnabled = videoCallEnabled;
+      this.useCamera2 = useCamera2;
       this.loopback = loopback;
       this.tracing = tracing;
       this.videoWidth = videoWidth;
@@ -247,6 +256,7 @@ public class PeerConnectionClient {
     this.events = events;
     videoCallEnabled = peerConnectionParameters.videoCallEnabled;
     // Reset variables to initial states.
+    this.context = null;
     factory = null;
     peerConnection = null;
     preferIsac = false;
@@ -364,6 +374,7 @@ public class PeerConnectionClient {
     if (options != null) {
       Log.d(TAG, "Factory networkIgnoreMask option: " + options.networkIgnoreMask);
     }
+    this.context = context;
     factory = new PeerConnectionFactory(options);
     Log.d(TAG, "Peer connection factory created.");
   }
@@ -453,6 +464,36 @@ public class PeerConnectionClient {
     }
   }
 
+  private void createCapturer(CameraEnumerator enumerator) {
+    final String[] deviceNames = enumerator.getDeviceNames();
+
+    // First, try to find front facing camera
+    Logging.d(TAG, "Looking for front facing cameras.");
+    for (String deviceName : deviceNames) {
+      if (enumerator.isFrontFacing(deviceName)) {
+        Logging.d(TAG, "Creating front facing camera capturer.");
+        videoCapturer = enumerator.createCapturer(deviceName, null);
+
+        if (videoCapturer != null) {
+          return;
+        }
+      }
+    }
+
+    // Front facing camera not found, try something else
+    Logging.d(TAG, "Looking for other cameras.");
+    for (String deviceName : deviceNames) {
+      if (!enumerator.isFrontFacing(deviceName)) {
+        Logging.d(TAG, "Creating other camera capturer.");
+        videoCapturer = enumerator.createCapturer(deviceName, null);
+
+        if (videoCapturer != null) {
+          return;
+        }
+      }
+    }
+  }
+
   private void createPeerConnectionInternal(EglBase.Context renderEGLContext) {
     if (factory == null || isError) {
       Log.e(TAG, "Peerconnection factory is not created");
@@ -490,20 +531,24 @@ public class PeerConnectionClient {
     // NOTE: this _must_ happen while |factory| is alive!
     Logging.enableTracing(
         "logcat:",
-        EnumSet.of(Logging.TraceLevel.TRACE_DEFAULT),
-        Logging.Severity.LS_INFO);
+        EnumSet.of(Logging.TraceLevel.TRACE_DEFAULT));
+    Logging.enableLogToDebugOutput(Logging.Severity.LS_INFO);
 
     mediaStream = factory.createLocalMediaStream("ARDAMS");
     if (videoCallEnabled) {
-      String cameraDeviceName = CameraEnumerationAndroid.getDeviceName(0);
-      String frontCameraDeviceName =
-          CameraEnumerationAndroid.getNameOfFrontFacingDevice();
-      if (numberOfCameras > 1 && frontCameraDeviceName != null) {
-        cameraDeviceName = frontCameraDeviceName;
+      if (peerConnectionParameters.useCamera2) {
+        if (!peerConnectionParameters.captureToTexture) {
+          reportError(context.getString(R.string.camera2_texture_only_error));
+          return;
+        }
+
+        Logging.d(TAG, "Creating capturer using camera2 API.");
+        createCapturer(new Camera2Enumerator(context));
+      } else {
+        Logging.d(TAG, "Creating capturer using camera1 API.");
+        createCapturer(new Camera1Enumerator(peerConnectionParameters.captureToTexture));
       }
-      Log.d(TAG, "Opening camera: " + cameraDeviceName);
-      videoCapturer = VideoCapturerAndroid.create(cameraDeviceName, null,
-          peerConnectionParameters.captureToTexture);
+
       if (videoCapturer == null) {
         reportError("Failed to open camera");
         return;
@@ -541,6 +586,11 @@ public class PeerConnectionClient {
     if (peerConnection != null) {
       peerConnection.dispose();
       peerConnection = null;
+    }
+    Log.d(TAG, "Closing audio source.");
+    if (audioSource != null) {
+      audioSource.dispose();
+      audioSource = null;
     }
     Log.d(TAG, "Closing video source.");
     if (videoSource != null) {
@@ -777,14 +827,13 @@ public class PeerConnectionClient {
   }
 
   private AudioTrack createAudioTrack() {
-    localAudioTrack = factory.createAudioTrack(
-        AUDIO_TRACK_ID,
-        factory.createAudioSource(audioConstraints));
+    audioSource = factory.createAudioSource(audioConstraints);
+    localAudioTrack = factory.createAudioTrack(AUDIO_TRACK_ID, audioSource);
     localAudioTrack.setEnabled(enableAudio);
     return localAudioTrack;
   }
 
-  private VideoTrack createVideoTrack(VideoCapturerAndroid capturer) {
+  private VideoTrack createVideoTrack(VideoCapturer capturer) {
     videoSource = factory.createVideoSource(capturer, videoConstraints);
 
     localVideoTrack = factory.createVideoTrack(VIDEO_TRACK_ID, videoSource);

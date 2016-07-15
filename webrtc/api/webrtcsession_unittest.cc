@@ -61,7 +61,6 @@ using webrtc::CreateSessionDescription;
 using webrtc::CreateSessionDescriptionObserver;
 using webrtc::CreateSessionDescriptionRequest;
 using webrtc::DataChannel;
-using webrtc::DtlsIdentityStoreInterface;
 using webrtc::FakeMetricsObserver;
 using webrtc::IceCandidateCollection;
 using webrtc::InternalDataChannelInit;
@@ -252,11 +251,6 @@ class WebRtcSessionForTest : public webrtc::WebRtcSession {
   cricket::TransportChannel* data_rtcp_transport_channel() {
     return rtcp_transport_channel(data_channel());
   }
-
-  using webrtc::WebRtcSession::SetAudioPlayout;
-  using webrtc::WebRtcSession::SetAudioSend;
-  using webrtc::WebRtcSession::SetVideoPlayout;
-  using webrtc::WebRtcSession::SetVideoSend;
 
  private:
   cricket::TransportChannel* rtp_transport_channel(cricket::BaseChannel* ch) {
@@ -2247,7 +2241,9 @@ TEST_F(WebRtcSessionTest,
   candidates = local_desc->candidates(kMediaContentIndex0);
   size_t num_local_candidates = candidates->count();
   // Enable Continual Gathering
-  session_->SetIceConfig(cricket::IceConfig(-1, -1, true, false, -1, true));
+  cricket::IceConfig config;
+  config.continual_gathering_policy = cricket::GATHER_CONTINUALLY;
+  session_->SetIceConfig(config);
   // Bring down the network interface to trigger candidate removals.
   RemoveInterface(rtc::SocketAddress(kClientAddrHost1, kClientAddrPort));
   // Verify that all local candidates are removed.
@@ -3390,163 +3386,6 @@ TEST_F(WebRtcSessionTest, TestDisabledRtcpMuxWithBundleEnabled) {
   SetRemoteDescriptionOfferExpectError(kBundleWithoutRtcpMux, remote_offer);
   // Trying unmodified SDP.
   SetLocalDescriptionWithoutError(offer);
-}
-
-TEST_F(WebRtcSessionTest, SetAudioPlayout) {
-  Init();
-  SendAudioVideoStream1();
-  CreateAndSetRemoteOfferAndLocalAnswer();
-  cricket::FakeVoiceMediaChannel* channel = media_engine_->GetVoiceChannel(0);
-  ASSERT_TRUE(channel != NULL);
-  ASSERT_EQ(1u, channel->recv_streams().size());
-  uint32_t receive_ssrc = channel->recv_streams()[0].first_ssrc();
-  double volume;
-  EXPECT_TRUE(channel->GetOutputVolume(receive_ssrc, &volume));
-  EXPECT_EQ(1, volume);
-  session_->SetAudioPlayout(receive_ssrc, false);
-  EXPECT_TRUE(channel->GetOutputVolume(receive_ssrc, &volume));
-  EXPECT_EQ(0, volume);
-  session_->SetAudioPlayout(receive_ssrc, true);
-  EXPECT_TRUE(channel->GetOutputVolume(receive_ssrc, &volume));
-  EXPECT_EQ(1, volume);
-}
-
-TEST_F(WebRtcSessionTest, SetAudioMaxSendBitrate) {
-  Init();
-  SendAudioVideoStream1();
-  CreateAndSetRemoteOfferAndLocalAnswer();
-  cricket::FakeVoiceMediaChannel* channel = media_engine_->GetVoiceChannel(0);
-  ASSERT_TRUE(channel != NULL);
-  uint32_t send_ssrc = channel->send_streams()[0].first_ssrc();
-  EXPECT_EQ(-1, channel->max_bps());
-  webrtc::RtpParameters params = session_->GetAudioRtpSendParameters(send_ssrc);
-  EXPECT_EQ(1, params.encodings.size());
-  EXPECT_EQ(-1, params.encodings[0].max_bitrate_bps);
-  params.encodings[0].max_bitrate_bps = 1000;
-  EXPECT_TRUE(session_->SetAudioRtpSendParameters(send_ssrc, params));
-
-  // Read back the parameters and verify they have been changed.
-  params = session_->GetAudioRtpSendParameters(send_ssrc);
-  EXPECT_EQ(1, params.encodings.size());
-  EXPECT_EQ(1000, params.encodings[0].max_bitrate_bps);
-
-  // Verify that the audio channel received the new parameters.
-  params = channel->GetRtpSendParameters(send_ssrc);
-  EXPECT_EQ(1, params.encodings.size());
-  EXPECT_EQ(1000, params.encodings[0].max_bitrate_bps);
-
-  // Verify that the global bitrate limit has not been changed.
-  EXPECT_EQ(-1, channel->max_bps());
-}
-
-TEST_F(WebRtcSessionTest, SetAudioSend) {
-  Init();
-  SendAudioVideoStream1();
-  CreateAndSetRemoteOfferAndLocalAnswer();
-  cricket::FakeVoiceMediaChannel* channel = media_engine_->GetVoiceChannel(0);
-  ASSERT_TRUE(channel != NULL);
-  ASSERT_EQ(1u, channel->send_streams().size());
-  uint32_t send_ssrc = channel->send_streams()[0].first_ssrc();
-  EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
-
-  cricket::AudioOptions options;
-  options.echo_cancellation = rtc::Optional<bool>(true);
-
-  std::unique_ptr<FakeAudioSource> source(new FakeAudioSource());
-  session_->SetAudioSend(send_ssrc, false, options, source.get());
-  EXPECT_TRUE(channel->IsStreamMuted(send_ssrc));
-  EXPECT_EQ(rtc::Optional<bool>(), channel->options().echo_cancellation);
-  EXPECT_TRUE(source->sink() != nullptr);
-
-  // This will trigger SetSink(nullptr) to the |source|.
-  session_->SetAudioSend(send_ssrc, true, options, nullptr);
-  EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
-  EXPECT_EQ(rtc::Optional<bool>(true), channel->options().echo_cancellation);
-  EXPECT_TRUE(source->sink() == nullptr);
-}
-
-TEST_F(WebRtcSessionTest, AudioSourceForLocalStream) {
-  Init();
-  SendAudioVideoStream1();
-  CreateAndSetRemoteOfferAndLocalAnswer();
-  cricket::FakeVoiceMediaChannel* channel = media_engine_->GetVoiceChannel(0);
-  ASSERT_TRUE(channel != NULL);
-  ASSERT_EQ(1u, channel->send_streams().size());
-  uint32_t send_ssrc = channel->send_streams()[0].first_ssrc();
-
-  std::unique_ptr<FakeAudioSource> source(new FakeAudioSource());
-  cricket::AudioOptions options;
-  session_->SetAudioSend(send_ssrc, true, options, source.get());
-  EXPECT_TRUE(source->sink() != nullptr);
-
-  // Delete the |source| and it will trigger OnClose() to the sink, and this
-  // will invalidate the |source_| pointer in the sink and prevent getting a
-  // SetSink(nullptr) callback afterwards.
-  source.reset();
-
-  // This will trigger SetSink(nullptr) if no OnClose() callback.
-  session_->SetAudioSend(send_ssrc, true, options, nullptr);
-}
-
-TEST_F(WebRtcSessionTest, SetVideoPlayout) {
-  Init();
-  SendAudioVideoStream1();
-  CreateAndSetRemoteOfferAndLocalAnswer();
-  cricket::FakeVideoMediaChannel* channel = media_engine_->GetVideoChannel(0);
-  ASSERT_TRUE(channel != NULL);
-  ASSERT_LT(0u, channel->sinks().size());
-  EXPECT_TRUE(channel->sinks().begin()->second == NULL);
-  ASSERT_EQ(1u, channel->recv_streams().size());
-  uint32_t receive_ssrc = channel->recv_streams()[0].first_ssrc();
-  cricket::FakeVideoRenderer renderer;
-  session_->SetVideoPlayout(receive_ssrc, true, &renderer);
-  EXPECT_TRUE(channel->sinks().begin()->second == &renderer);
-  session_->SetVideoPlayout(receive_ssrc, false, &renderer);
-  EXPECT_TRUE(channel->sinks().begin()->second == NULL);
-}
-
-TEST_F(WebRtcSessionTest, SetVideoMaxSendBitrate) {
-  Init();
-  SendAudioVideoStream1();
-  CreateAndSetRemoteOfferAndLocalAnswer();
-  cricket::FakeVideoMediaChannel* channel = media_engine_->GetVideoChannel(0);
-  ASSERT_TRUE(channel != NULL);
-  uint32_t send_ssrc = channel->send_streams()[0].first_ssrc();
-  EXPECT_EQ(-1, channel->max_bps());
-  webrtc::RtpParameters params = session_->GetVideoRtpSendParameters(send_ssrc);
-  EXPECT_EQ(1, params.encodings.size());
-  EXPECT_EQ(-1, params.encodings[0].max_bitrate_bps);
-  params.encodings[0].max_bitrate_bps = 1000;
-  EXPECT_TRUE(session_->SetVideoRtpSendParameters(send_ssrc, params));
-
-  // Read back the parameters and verify they have been changed.
-  params = session_->GetVideoRtpSendParameters(send_ssrc);
-  EXPECT_EQ(1, params.encodings.size());
-  EXPECT_EQ(1000, params.encodings[0].max_bitrate_bps);
-
-  // Verify that the video channel received the new parameters.
-  params = channel->GetRtpSendParameters(send_ssrc);
-  EXPECT_EQ(1, params.encodings.size());
-  EXPECT_EQ(1000, params.encodings[0].max_bitrate_bps);
-
-  // Verify that the global bitrate limit has not been changed.
-  EXPECT_EQ(-1, channel->max_bps());
-}
-
-TEST_F(WebRtcSessionTest, SetVideoSend) {
-  Init();
-  SendAudioVideoStream1();
-  CreateAndSetRemoteOfferAndLocalAnswer();
-  cricket::FakeVideoMediaChannel* channel = media_engine_->GetVideoChannel(0);
-  ASSERT_TRUE(channel != NULL);
-  ASSERT_EQ(1u, channel->send_streams().size());
-  uint32_t send_ssrc = channel->send_streams()[0].first_ssrc();
-  EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
-  cricket::VideoOptions* options = NULL;
-  session_->SetVideoSend(send_ssrc, false, options, nullptr);
-  EXPECT_TRUE(channel->IsStreamMuted(send_ssrc));
-  session_->SetVideoSend(send_ssrc, true, options, nullptr);
-  EXPECT_FALSE(channel->IsStreamMuted(send_ssrc));
 }
 
 TEST_F(WebRtcSessionTest, CanNotInsertDtmf) {
