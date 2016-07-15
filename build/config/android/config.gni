@@ -11,6 +11,13 @@ if (is_android) {
 
   import("//build_overrides/build.gni")
 
+  # Disable all java-related templates in secondary toolchains. Java is not
+  # toolchain-dependent, so a variation on toolchains is likely a mistake.
+  if (enable_java_templates) {
+    assert(current_toolchain == default_toolchain,
+           "Android templates should be used only by the default toolchain.")
+  }
+
   has_chrome_android_internal =
       exec_script("//build/dir_exists.py",
                   [ rebase_path("//clank", root_build_dir) ],
@@ -126,8 +133,8 @@ if (is_android) {
     # Neither of these should ever be used for release builds since they are
     # somewhat experimental and dx --incremental is known to not produce
     # byte-for-byte identical output.
-    assert(!(enable_incremental_dx && !is_debug))
-    assert(!(enable_incremental_javac && !is_debug))
+    assert(!(enable_incremental_dx && !is_java_debug))
+    assert(!(enable_incremental_javac && !is_java_debug))
 
     # Adds intrumentation to each function. Writes a file with the order that
     # functions are called at startup.

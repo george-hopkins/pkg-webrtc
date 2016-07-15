@@ -120,6 +120,22 @@
             "group_name": "NetworkTimeQueriesEnabled"
         }
     ],
+    "NewAudioRenderingMixingStrategy": [
+        {
+            "enable_features": [
+                "NewAudioRenderingMixingStrategy"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
+    "NonValidatingReloadOnNormalReload": [
+        {
+            "enable_features": [
+                "NonValidatingReloadOnNormalReload"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "OfferUploadCreditCards": [
         {
             "group_name": "Enabled"
@@ -132,6 +148,14 @@
     ],
     "PageRevisitInstrumentation": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "PassiveDocumentEventListeners": [
+        {
+            "enable_features": [
+                "PassiveDocumentEventListeners"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -149,6 +173,14 @@
         {
             "enable_features": [
                 "UsePasswordSeparatedSigninFlow"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
+    "PointerEvent": [
+        {
+            "enable_features": [
+                "PointerEvent"
             ],
             "group_name": "Enabled"
         }
@@ -259,6 +291,11 @@
             }
         }
     ],
+    "SafeBrowsingV4LocalDatabaseManagerEnabled": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "SchedulerExpensiveTaskBlocking": [
         {
             "group_name": "Enabled"
@@ -301,6 +338,9 @@
         }
     ],
     "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "default"
+        },
         {
             "group_name": "none"
         },

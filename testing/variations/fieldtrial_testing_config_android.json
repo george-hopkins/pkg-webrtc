@@ -210,6 +210,14 @@
             "group_name": "NetworkTimeQueriesEnabled"
         }
     ],
+    "NewAudioRenderingMixingStrategy": [
+        {
+            "enable_features": [
+                "NewAudioRenderingMixingStrategy"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "NonValidatingReloadOnRefreshContent": [
         {
             "enable_features": [
@@ -244,6 +252,14 @@
             "group_name": "Enabled"
         }
     ],
+    "PassiveDocumentEventListeners": [
+        {
+            "enable_features": [
+                "PassiveDocumentEventListeners"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "PasswordBranding": [
         {
             "group_name": "SmartLockBrandingSavePromptOnly"
@@ -258,6 +274,14 @@
         {
             "enable_features": [
                 "PhysicalWeb"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
+    "PointerEvent": [
+        {
+            "enable_features": [
+                "PointerEvent"
             ],
             "group_name": "Enabled"
         }
@@ -488,6 +512,9 @@
         }
     ],
     "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "default"
+        },
         {
             "group_name": "none"
         },
