@@ -40,14 +40,30 @@ GYP_DEFINES += android_must_copy_system_libraries=0
 REPLACE_GYP_FILES += -Duse_system_gflags=1
 REPLACE_GYP_FILES += -Duse_system_libjpeg=1
 
-# VideoCapturer depends on android.content.Context
-DISABLED_JAVA_FILES += webrtc/api/java/src/org/webrtc/VideoCapturer.java
-
-# Disable media encoders which make use of the Android multimedia framework
-DISABLED_JAVA_FILES += webrtc/api/java/src/org/webrtc/MediaCodecVideoEncoder.java
-DISABLED_JAVA_FILES += webrtc/api/java/src/org/webrtc/MediaCodecVideoDecoder.java
-
-# Disable ThreadUtils
+# Disable classes which depend on Android internals
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/Camera1Enumerator.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/Camera2Capturer.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/Camera2Enumerator.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/CameraEnumerator.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/CameraEnumerationAndroid.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/CameraVideoCapturer.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/EglBase.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/EglBase10.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/EglBase14.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/GlRectDrawer.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/GlShader.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/GlTextureFrameBuffer.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/GlUtil.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/MediaCodecVideoDecoder.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/MediaCodecVideoEncoder.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/NetworkMonitor.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/NetworkMonitorAutoDetect.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/RendererCommon.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/SurfaceTextureHelper.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/SurfaceViewRenderer.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/VideoCapturer.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/VideoCapturerAndroid.java
+DISABLED_JAVA_FILES += webrtc/api/android/java/src/org/webrtc/VideoRendererGui.java
 DISABLED_JAVA_FILES += webrtc/base/java/src/org/webrtc/ThreadUtils.java
 
 GYP_ARGS += $(REPLACE_GYP_FILES)
