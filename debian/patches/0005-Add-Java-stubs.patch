@@ -3,17 +3,17 @@ Date: Mon, 27 Jun 2016 00:54:18 +0200
 Subject: Add Java stubs
 
 ---
- webrtc/api/java/linux/org/webrtc/EglBase.java      | 58 ++++++++++++++++++++++
- .../api/java/linux/org/webrtc/VideoCapturer.java   | 14 ++++++
+ webrtc/api/linux/java/src/org/webrtc/EglBase.java  | 58 ++++++++++++++++++++++
+ .../linux/java/src/org/webrtc/VideoCapturer.java   | 14 ++++++
  2 files changed, 72 insertions(+)
- create mode 100644 webrtc/api/java/linux/org/webrtc/EglBase.java
- create mode 100644 webrtc/api/java/linux/org/webrtc/VideoCapturer.java
+ create mode 100644 webrtc/api/linux/java/src/org/webrtc/EglBase.java
+ create mode 100644 webrtc/api/linux/java/src/org/webrtc/VideoCapturer.java
 
-diff --git a/webrtc/api/java/linux/org/webrtc/EglBase.java b/webrtc/api/java/linux/org/webrtc/EglBase.java
+diff --git a/webrtc/api/linux/java/src/org/webrtc/EglBase.java b/webrtc/api/linux/java/src/org/webrtc/EglBase.java
 new file mode 100644
 index 0000000..fe2ea8f
 --- /dev/null
-+++ b/webrtc/api/java/linux/org/webrtc/EglBase.java
++++ b/webrtc/api/linux/java/src/org/webrtc/EglBase.java
 @@ -0,0 +1,58 @@
 +/*
 + *  Copyright 2016 The WebRTC project authors. All Rights Reserved.
@@ -73,11 +73,11 @@ index 0000000..fe2ea8f
 +
 +  public abstract void swapBuffers();
 +}
-diff --git a/webrtc/api/java/linux/org/webrtc/VideoCapturer.java b/webrtc/api/java/linux/org/webrtc/VideoCapturer.java
+diff --git a/webrtc/api/linux/java/src/org/webrtc/VideoCapturer.java b/webrtc/api/linux/java/src/org/webrtc/VideoCapturer.java
 new file mode 100644
 index 0000000..7049bca
 --- /dev/null
-+++ b/webrtc/api/java/linux/org/webrtc/VideoCapturer.java
++++ b/webrtc/api/linux/java/src/org/webrtc/VideoCapturer.java
 @@ -0,0 +1,14 @@
 +/*
 + *  Copyright 2016 The WebRTC project authors. All Rights Reserved.

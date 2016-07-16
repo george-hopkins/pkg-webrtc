@@ -3,14 +3,14 @@ Date: Mon, 27 Jun 2016 00:53:49 +0200
 Subject: Fix JNI classes
 
 ---
- webrtc/api/java/jni/classreferenceholder.cc | 19 -------------------
- webrtc/api/java/jni/peerconnection_jni.cc   | 24 ++++++++++++++----------
+ webrtc/api/android/jni/classreferenceholder.cc | 19 -------------------
+ webrtc/api/android/jni/peerconnection_jni.cc   | 24 ++++++++++++++----------
  2 files changed, 14 insertions(+), 29 deletions(-)
 
-diff --git a/webrtc/api/java/jni/classreferenceholder.cc b/webrtc/api/java/jni/classreferenceholder.cc
-index 3d8f304..2872828 100644
---- a/webrtc/api/java/jni/classreferenceholder.cc
-+++ b/webrtc/api/java/jni/classreferenceholder.cc
+diff --git a/webrtc/api/android/jni/classreferenceholder.cc b/webrtc/api/android/jni/classreferenceholder.cc
+index be5cde2..4e3d7cc 100644
+--- a/webrtc/api/android/jni/classreferenceholder.cc
++++ b/webrtc/api/android/jni/classreferenceholder.cc
 @@ -44,37 +44,21 @@ void FreeGlobalClassReferenceHolder() {
  }
  
@@ -60,11 +60,11 @@ index 3d8f304..2872828 100644
    LoadClass(jni, "org/webrtc/VideoTrack");
  }
  
-diff --git a/webrtc/api/java/jni/peerconnection_jni.cc b/webrtc/api/java/jni/peerconnection_jni.cc
-index a5ba254..bb3c914 100644
---- a/webrtc/api/java/jni/peerconnection_jni.cc
-+++ b/webrtc/api/java/jni/peerconnection_jni.cc
-@@ -71,7 +71,6 @@
+diff --git a/webrtc/api/android/jni/peerconnection_jni.cc b/webrtc/api/android/jni/peerconnection_jni.cc
+index fefb447..9e9e355 100644
+--- a/webrtc/api/android/jni/peerconnection_jni.cc
++++ b/webrtc/api/android/jni/peerconnection_jni.cc
+@@ -70,7 +70,6 @@
  #include "webrtc/media/engine/webrtcvideodecoderfactory.h"
  #include "webrtc/media/engine/webrtcvideoencoderfactory.h"
  #include "webrtc/system_wrappers/include/field_trial_default.h"
@@ -72,7 +72,7 @@ index a5ba254..bb3c914 100644
  #include "webrtc/system_wrappers/include/trace.h"
  #include "webrtc/voice_engine/include/voe_base.h"
  
-@@ -89,7 +88,6 @@ using webrtc::DataChannelInit;
+@@ -88,7 +87,6 @@ using webrtc::DataChannelInit;
  using webrtc::DataChannelInterface;
  using webrtc::DataChannelObserver;
  using webrtc::IceCandidateInterface;
@@ -80,7 +80,7 @@ index a5ba254..bb3c914 100644
  using webrtc::MediaConstraintsInterface;
  using webrtc::MediaSourceInterface;
  using webrtc::MediaStreamInterface;
-@@ -889,14 +887,8 @@ JOW(void, Logging_nativeEnableTracing)(
+@@ -887,14 +885,8 @@ JOW(void, Logging_nativeEnableTracing)(
    std::string path = JavaToStdString(jni, j_path);
    if (nativeLevels != webrtc::kTraceNone) {
      webrtc::Trace::set_level_filter(nativeLevels);
@@ -95,9 +95,9 @@ index a5ba254..bb3c914 100644
 +    RTC_CHECK_EQ(0, webrtc::Trace::SetTraceFile(path.c_str(), false))
 +        << "SetTraceFile failed";
    }
-   if (nativeSeverity >= rtc::LS_SENSITIVE && nativeSeverity <= rtc::LS_ERROR) {
-     rtc::LogMessage::LogToDebug(
-@@ -989,6 +981,7 @@ JOW(jboolean, PeerConnectionFactory_initializeAndroidGlobals)(
+ }
+ 
+@@ -991,6 +983,7 @@ JOW(jboolean, PeerConnectionFactory_initializeAndroidGlobals)(
      jboolean video_hw_acceleration) {
    bool failure = false;
    video_hw_acceleration_enabled = video_hw_acceleration;
@@ -105,7 +105,7 @@ index a5ba254..bb3c914 100644
    AndroidNetworkMonitor::SetAndroidContext(jni, context);
    if (!factory_static_initialized) {
      if (initialize_video) {
-@@ -998,6 +991,7 @@ JOW(jboolean, PeerConnectionFactory_initializeAndroidGlobals)(
+@@ -1000,6 +993,7 @@ JOW(jboolean, PeerConnectionFactory_initializeAndroidGlobals)(
        failure |= webrtc::VoiceEngine::SetAndroidObjects(GetJVM(), context);
      factory_static_initialized = true;
    }
@@ -113,7 +113,7 @@ index a5ba254..bb3c914 100644
    return !failure;
  }
  
-@@ -1189,14 +1183,18 @@ JOW(jlong, PeerConnectionFactory_nativeCreatePeerConnectionFactory)(
+@@ -1191,14 +1185,18 @@ JOW(jlong, PeerConnectionFactory_nativeCreatePeerConnectionFactory)(
    }
  
    if (video_hw_acceleration_enabled) {
@@ -132,7 +132,7 @@ index a5ba254..bb3c914 100644
    }
  
    rtc::scoped_refptr<PeerConnectionFactoryInterface> factory(
-@@ -1251,6 +1249,7 @@ JOW(jlong, PeerConnectionFactory_nativeCreateLocalMediaStream)(
+@@ -1253,6 +1251,7 @@ JOW(jlong, PeerConnectionFactory_nativeCreateLocalMediaStream)(
  JOW(jlong, PeerConnectionFactory_nativeCreateVideoSource)(
      JNIEnv* jni, jclass, jlong native_factory, jobject j_egl_context,
      jobject j_video_capturer, jobject j_constraints) {
@@ -140,7 +140,7 @@ index a5ba254..bb3c914 100644
    // Create a cricket::VideoCapturer from |j_video_capturer|.
    rtc::scoped_refptr<webrtc::AndroidVideoCapturerDelegate> delegate =
        new rtc::RefCountedObject<AndroidVideoCapturerJni>(
-@@ -1266,6 +1265,9 @@ JOW(jlong, PeerConnectionFactory_nativeCreateVideoSource)(
+@@ -1268,6 +1267,9 @@ JOW(jlong, PeerConnectionFactory_nativeCreateVideoSource)(
    rtc::scoped_refptr<VideoTrackSourceInterface> source(
        factory->CreateVideoSource(capturer.release(), constraints.get()));
    return (jlong)source.release();
@@ -150,7 +150,7 @@ index a5ba254..bb3c914 100644
  }
  
  JOW(jlong, PeerConnectionFactory_nativeCreateVideoTrack)(
-@@ -1356,6 +1358,7 @@ JOW(void, PeerConnectionFactory_nativeSetOptions)(
+@@ -1340,6 +1342,7 @@ JOW(void, PeerConnectionFactory_nativeSetOptions)(
  JOW(void, PeerConnectionFactory_nativeSetVideoHwAccelerationOptions)(
      JNIEnv* jni, jclass, jlong native_factory, jobject local_egl_context,
      jobject remote_egl_context) {
@@ -158,7 +158,7 @@ index a5ba254..bb3c914 100644
    OwnedFactoryAndThreads* owned_factory =
        reinterpret_cast<OwnedFactoryAndThreads*>(native_factory);
  
-@@ -1378,6 +1381,7 @@ JOW(void, PeerConnectionFactory_nativeSetVideoHwAccelerationOptions)(
+@@ -1362,6 +1365,7 @@ JOW(void, PeerConnectionFactory_nativeSetVideoHwAccelerationOptions)(
      LOG(LS_INFO) << "Set EGL context for HW decoding.";
      decoder_factory->SetEGLContext(jni, remote_egl_context);
    }

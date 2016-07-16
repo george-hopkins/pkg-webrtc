@@ -3,17 +3,17 @@ Date: Mon, 27 Jun 2016 23:21:31 +0200
 Subject: Set path to JNI library
 
 ---
- webrtc/api/java/src/org/webrtc/CallSessionFileRotatingLogSink.java | 2 +-
- webrtc/api/java/src/org/webrtc/Metrics.java                        | 2 +-
- webrtc/api/java/src/org/webrtc/PeerConnection.java                 | 2 +-
- webrtc/api/java/src/org/webrtc/PeerConnectionFactory.java          | 2 +-
- webrtc/base/java/src/org/webrtc/Logging.java                       | 2 +-
+ .../api/android/java/src/org/webrtc/CallSessionFileRotatingLogSink.java | 2 +-
+ webrtc/api/android/java/src/org/webrtc/Metrics.java                     | 2 +-
+ webrtc/api/android/java/src/org/webrtc/PeerConnection.java              | 2 +-
+ webrtc/api/android/java/src/org/webrtc/PeerConnectionFactory.java       | 2 +-
+ webrtc/base/java/src/org/webrtc/Logging.java                            | 2 +-
  5 files changed, 5 insertions(+), 5 deletions(-)
 
-diff --git a/webrtc/api/java/src/org/webrtc/CallSessionFileRotatingLogSink.java b/webrtc/api/java/src/org/webrtc/CallSessionFileRotatingLogSink.java
+diff --git a/webrtc/api/android/java/src/org/webrtc/CallSessionFileRotatingLogSink.java b/webrtc/api/android/java/src/org/webrtc/CallSessionFileRotatingLogSink.java
 index 47b4641..15faec1 100644
---- a/webrtc/api/java/src/org/webrtc/CallSessionFileRotatingLogSink.java
-+++ b/webrtc/api/java/src/org/webrtc/CallSessionFileRotatingLogSink.java
+--- a/webrtc/api/android/java/src/org/webrtc/CallSessionFileRotatingLogSink.java
++++ b/webrtc/api/android/java/src/org/webrtc/CallSessionFileRotatingLogSink.java
 @@ -12,7 +12,7 @@ package org.webrtc;
  
  public class CallSessionFileRotatingLogSink {
@@ -23,10 +23,10 @@ index 47b4641..15faec1 100644
    }
  
    private long nativeSink;
-diff --git a/webrtc/api/java/src/org/webrtc/Metrics.java b/webrtc/api/java/src/org/webrtc/Metrics.java
+diff --git a/webrtc/api/android/java/src/org/webrtc/Metrics.java b/webrtc/api/android/java/src/org/webrtc/Metrics.java
 index 90209ad..69f7345 100644
---- a/webrtc/api/java/src/org/webrtc/Metrics.java
-+++ b/webrtc/api/java/src/org/webrtc/Metrics.java
+--- a/webrtc/api/android/java/src/org/webrtc/Metrics.java
++++ b/webrtc/api/android/java/src/org/webrtc/Metrics.java
 @@ -31,7 +31,7 @@ import java.util.Map;
  
  public class Metrics {
@@ -36,10 +36,10 @@ index 90209ad..69f7345 100644
    }
    public final Map<String, HistogramInfo> map =
         new HashMap<String, HistogramInfo>();  // <name, HistogramInfo>
-diff --git a/webrtc/api/java/src/org/webrtc/PeerConnection.java b/webrtc/api/java/src/org/webrtc/PeerConnection.java
-index ad8362d..43371b7 100644
---- a/webrtc/api/java/src/org/webrtc/PeerConnection.java
-+++ b/webrtc/api/java/src/org/webrtc/PeerConnection.java
+diff --git a/webrtc/api/android/java/src/org/webrtc/PeerConnection.java b/webrtc/api/android/java/src/org/webrtc/PeerConnection.java
+index 3f7952e..0639698 100644
+--- a/webrtc/api/android/java/src/org/webrtc/PeerConnection.java
++++ b/webrtc/api/android/java/src/org/webrtc/PeerConnection.java
 @@ -23,7 +23,7 @@ import java.util.List;
   */
  public class PeerConnection {
@@ -49,10 +49,10 @@ index ad8362d..43371b7 100644
    }
  
    /** Tracks PeerConnectionInterface::IceGatheringState */
-diff --git a/webrtc/api/java/src/org/webrtc/PeerConnectionFactory.java b/webrtc/api/java/src/org/webrtc/PeerConnectionFactory.java
-index 0c1ef3c..302aa3c 100644
---- a/webrtc/api/java/src/org/webrtc/PeerConnectionFactory.java
-+++ b/webrtc/api/java/src/org/webrtc/PeerConnectionFactory.java
+diff --git a/webrtc/api/android/java/src/org/webrtc/PeerConnectionFactory.java b/webrtc/api/android/java/src/org/webrtc/PeerConnectionFactory.java
+index 2edd56e..ba68ffc 100644
+--- a/webrtc/api/android/java/src/org/webrtc/PeerConnectionFactory.java
++++ b/webrtc/api/android/java/src/org/webrtc/PeerConnectionFactory.java
 @@ -19,7 +19,7 @@ import java.util.List;
   */
  public class PeerConnectionFactory {
@@ -63,10 +63,10 @@ index 0c1ef3c..302aa3c 100644
  
    private static final String TAG = "PeerConnectionFactory";
 diff --git a/webrtc/base/java/src/org/webrtc/Logging.java b/webrtc/base/java/src/org/webrtc/Logging.java
-index ea1bca3..2fcd1c2 100644
+index 684e5bc..e6d89a9 100644
 --- a/webrtc/base/java/src/org/webrtc/Logging.java
 +++ b/webrtc/base/java/src/org/webrtc/Logging.java
-@@ -24,7 +24,7 @@ public class Logging {
+@@ -25,7 +25,7 @@ public class Logging {
  
    static {
      try {
