@@ -176,8 +176,6 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
     channel_->SetRemoteIceMode(mode);
   }
 
-  void Connect() override;
-
   void MaybeStartGathering() override { channel_->MaybeStartGathering(); }
 
   IceGatheringState gathering_state() const override {
@@ -209,7 +207,7 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   void OnReceivingState(TransportChannel* channel);
   void OnDtlsEvent(rtc::StreamInterface* stream_, int sig, int err);
   bool SetupDtls();
-  bool MaybeStartDtls();
+  void MaybeStartDtls();
   bool HandleDtlsPacket(const char* data, size_t size);
   void OnGatheringState(TransportChannelImpl* channel);
   void OnCandidateGathered(TransportChannelImpl* channel, const Candidate& c);
@@ -220,9 +218,9 @@ class DtlsTransportChannelWrapper : public TransportChannelImpl {
   void OnSelectedCandidatePairChanged(
       TransportChannel* channel,
       CandidatePairInterface* selected_candidate_pair,
-      int last_sent_packet_id);
+      int last_sent_packet_id,
+      bool ready_to_send);
   void OnChannelStateChanged(TransportChannelImpl* channel);
-  void Reconnect();
 
   rtc::Thread* worker_thread_;  // Everything should occur on this thread.
   // Underlying channel, not owned by this class.

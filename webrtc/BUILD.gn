@@ -175,10 +175,6 @@ config("common_config") {
     }
   }
 
-  if (rtc_enable_libevent) {
-    defines += [ "WEBRTC_BUILD_LIBEVENT" ]
-  }
-
   if (current_cpu == "arm64") {
     defines += [ "WEBRTC_ARCH_ARM64" ]
     defines += [ "WEBRTC_HAS_NEON" ]
@@ -358,7 +354,7 @@ if (rtc_enable_protobuf) {
     configs += [ ":common_config" ]
     public_configs = [ ":common_inherited_config" ]
 
-    deps = [
+    public_deps = [
       ":rtc_event_log_proto",
       ":webrtc_common",
     ]
@@ -442,6 +438,7 @@ if (rtc_include_tests) {
       "base/proxy_unittest.cc",
       "base/proxydetect_unittest.cc",
       "base/random_unittest.cc",
+      "base/rate_limiter_unittest.cc",
       "base/rate_statistics_unittest.cc",
       "base/ratelimiter_unittest.cc",
       "base/ratetracker_unittest.cc",
@@ -450,6 +447,7 @@ if (rtc_include_tests) {
       "base/rtccertificate_unittest.cc",
       "base/rtccertificategenerator_unittest.cc",
       "base/scopedptrcollection_unittest.cc",
+      "base/sequenced_task_checker_unittest.cc",
       "base/sha1digest_unittest.cc",
       "base/sharedexclusivelock_unittest.cc",
       "base/signalthread_unittest.cc",
@@ -606,6 +604,56 @@ if (rtc_include_tests) {
       "test:test_main",
       "video:video_tests",
     ]
+    if (is_clang) {
+      # Suppress warnings from the Chromium Clang plugin.
+      # See http://code.google.com/p/webrtc/issues/detail?id=163 for details.
+      configs -= [ "//build/config/clang:find_bad_constructs" ]
+    }
+  }
+
+  test("webrtc_nonparallel_tests") {
+    testonly = true
+    configs += [
+      ":common_config",
+      ":rtc_unittests_config",
+    ]
+    public_configs = [ ":common_inherited_config" ]
+    sources = [
+      "base/nullsocketserver_unittest.cc",
+      "base/physicalsocketserver_unittest.cc",
+      "base/socket_unittest.cc",
+      "base/socket_unittest.h",
+      "base/socketaddress_unittest.cc",
+      "base/virtualsocket_unittest.cc",
+    ]
+    deps = [
+      "base:rtc_base",
+      "base:rtc_base_tests_utils",
+      "//testing/gtest",
+    ]
+    if (is_win) {
+      sources += [ "base/win32socketserver_unittest.cc" ]
+
+      # TODO(ronghuawu): Fix TestUdpReadyToSendIPv6 on windows bot then reenable
+      # these tests.
+      # TODO(pbos): Move test disabling to ifdefs within the test files instead
+      # of here.
+      sources -= [
+        "base/physicalsocketserver_unittest.cc",
+        "base/socket_unittest.cc",
+        "base/win32socketserver_unittest.cc",
+      ]
+    }
+    if (is_android) {
+      deps += [ "//testing/android/native_test:native_test_support" ]
+    }
+
+    if (is_mac) {
+      sources += [ "base/macsocketserver_unittest.cc" ]
+    }
+    if (is_ios || (is_mac && target_cpu != "x86")) {
+      defines = [ "CARBON_DEPRECATED=YES" ]
+    }
     if (is_clang) {
       # Suppress warnings from the Chromium Clang plugin.
       # See http://code.google.com/p/webrtc/issues/detail?id=163 for details.

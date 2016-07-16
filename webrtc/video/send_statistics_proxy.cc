@@ -418,7 +418,7 @@ void SendStatisticsProxy::OnInactiveSsrc(uint32_t ssrc) {
   stats->width = 0;
 }
 
-void SendStatisticsProxy::OnSetRates(uint32_t bitrate_bps, int framerate) {
+void SendStatisticsProxy::OnSetEncoderTargetRate(uint32_t bitrate_bps) {
   rtc::CritScope lock(&crit_);
   stats_.target_media_bitrate_bps = bitrate_bps;
 }
@@ -564,16 +564,16 @@ void SendStatisticsProxy::DataCountersUpdated(
     uma_container_->first_rtp_stats_time_ms_ = clock_->TimeInMilliseconds();
 }
 
-void SendStatisticsProxy::Notify(const BitrateStatistics& total_stats,
-                                 const BitrateStatistics& retransmit_stats,
+void SendStatisticsProxy::Notify(uint32_t total_bitrate_bps,
+                                 uint32_t retransmit_bitrate_bps,
                                  uint32_t ssrc) {
   rtc::CritScope lock(&crit_);
   VideoSendStream::StreamStats* stats = GetStatsEntry(ssrc);
   if (!stats)
     return;
 
-  stats->total_bitrate_bps = total_stats.bitrate_bps;
-  stats->retransmit_bitrate_bps = retransmit_stats.bitrate_bps;
+  stats->total_bitrate_bps = total_bitrate_bps;
+  stats->retransmit_bitrate_bps = retransmit_bitrate_bps;
 }
 
 void SendStatisticsProxy::FrameCountUpdated(const FrameCounts& frame_counts,

@@ -120,6 +120,14 @@
             "group_name": "Enabled"
         }
     ],
+    "PassiveDocumentEventListeners": [
+        {
+            "enable_features": [
+                "PassiveDocumentEventListeners"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "PasswordBranding": [
         {
             "group_name": "SmartLockBrandingSavePromptOnly"
@@ -128,6 +136,14 @@
     "PasswordManagerSettingsMigration": [
         {
             "group_name": "Enable"
+        }
+    ],
+    "PointerEvent": [
+        {
+            "enable_features": [
+                "PointerEvent"
+            ],
+            "group_name": "Enabled"
         }
     ],
     "PreconnectMore": [
@@ -212,6 +228,11 @@
             "group_name": "Default"
         }
     ],
+    "SafeBrowsingV4LocalDatabaseManagerEnabled": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "SchedulerExpensiveTaskBlocking": [
         {
             "group_name": "Enabled"
@@ -254,6 +275,9 @@
         }
     ],
     "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "default"
+        },
         {
             "group_name": "none"
         },

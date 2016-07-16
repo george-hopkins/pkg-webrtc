@@ -33,6 +33,7 @@ class RtpFrameReferenceFinder {
  public:
   explicit RtpFrameReferenceFinder(OnCompleteFrameCallback* frame_callback);
   void ManageFrame(std::unique_ptr<RtpFrameObject> frame);
+  void PaddingReceived(uint16_t seq_num);
 
  private:
   static const uint16_t kPicIdLength = 1 << 7;
@@ -41,8 +42,22 @@ class RtpFrameReferenceFinder {
   static const int kMaxStashedFrames = 10;
   static const int kMaxNotYetReceivedFrames = 20;
   static const int kMaxGofSaved = 15;
+  static const int kMaxPaddingAge = 100;
+
+
+  struct GofInfo {
+    GofInfo(GofInfoVP9* gof, uint16_t last_picture_id)
+        : gof(gof), last_picture_id(last_picture_id) {}
+    GofInfoVP9* gof;
+    uint16_t last_picture_id;
+  };
 
   rtc::CriticalSection crit_;
+
+  // Find the relevant group of pictures and update its "last-picture-id-with
+  // padding" sequence number.
+  void UpdateLastPictureIdWithPadding(uint16_t seq_num)
+      EXCLUSIVE_LOCKS_REQUIRED(crit_);
 
   // Retry finding references for all frames that previously didn't have
   // all information needed.
@@ -75,13 +90,13 @@ class RtpFrameReferenceFinder {
 
   // Check if we are missing a frame necessary to determine the references
   // for this frame.
-  bool MissingRequiredFrameVp9(uint16_t picture_id, const GofInfoVP9& gof)
+  bool MissingRequiredFrameVp9(uint16_t picture_id, const GofInfo& info)
       EXCLUSIVE_LOCKS_REQUIRED(crit_);
 
   // Updates which frames that have been received. If there is a gap,
   // missing frames will be added to |missing_frames_for_layer_| or
   // if this is an already missing frame then it will be removed.
-  void FrameReceivedVp9(uint16_t picture_id, const GofInfoVP9& gof)
+  void FrameReceivedVp9(uint16_t picture_id, GofInfo* info)
       EXCLUSIVE_LOCKS_REQUIRED(crit_);
 
   // Check if there is a frame with the up-switch flag set in the interval
@@ -93,14 +108,24 @@ class RtpFrameReferenceFinder {
   // All picture ids are unwrapped to 16 bits.
   uint16_t UnwrapPictureId(uint16_t picture_id) EXCLUSIVE_LOCKS_REQUIRED(crit_);
 
-  // Holds the last sequence number of the last frame that has been created
-  // given the last sequence number of a given keyframe.
-  std::map<uint16_t, uint16_t, DescendingSeqNumComp<uint16_t>> last_seq_num_gop_
-      GUARDED_BY(crit_);
+
+  // For every group of pictures, hold two sequence numbers. The first being
+  // the sequence number of the last packet of the last completed frame, and
+  // the second being the sequence number of the last packet of the last
+  // completed frame advanced by any potential continuous packets of padding.
+  std::map<uint16_t,
+           std::pair<uint16_t, uint16_t>,
+           DescendingSeqNumComp<uint16_t>>
+      last_seq_num_gop_ GUARDED_BY(crit_);
 
   // Save the last picture id in order to detect when there is a gap in frames
   // that have not yet been fully received.
   int last_picture_id_ GUARDED_BY(crit_);
+
+  // Padding packets that have been received but that are not yet continuous
+  // with any group of pictures.
+  std::set<uint16_t, DescendingSeqNumComp<uint16_t>> stashed_padding_
+      GUARDED_BY(crit_);
 
   // The last unwrapped picture id. Used to unwrap the picture id from a length
   // of |kPicIdLength| to 16 bits.
@@ -130,15 +155,14 @@ class RtpFrameReferenceFinder {
   std::array<GofInfoVP9, kMaxGofSaved> scalability_structures_
       GUARDED_BY(crit_);
 
-  // Holds the picture id and the Gof information for a given TL0 picture index.
-  std::map<uint8_t,
-           std::pair<uint16_t, GofInfoVP9*>,
-           DescendingSeqNumComp<uint8_t>>
-      gof_info_ GUARDED_BY(crit_);
+  // Holds the the Gof information for a given TL0 picture index.
+  std::map<uint8_t, GofInfo, DescendingSeqNumComp<uint8_t>> gof_info_
+      GUARDED_BY(crit_);
 
   // Keep track of which picture id and which temporal layer that had the
   // up switch flag set.
-  std::map<uint16_t, uint8_t> up_switch_ GUARDED_BY(crit_);
+  std::map<uint16_t, uint8_t, DescendingSeqNumComp<uint16_t, kPicIdLength>>
+      up_switch_ GUARDED_BY(crit_);
 
   // For every temporal layer, keep a set of which frames that are missing.
   std::array<std::set<uint16_t, DescendingSeqNumComp<uint16_t, kPicIdLength>>,

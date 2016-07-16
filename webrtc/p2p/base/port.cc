@@ -130,6 +130,7 @@ static std::string ComputeFoundation(const std::string& type,
 }
 
 Port::Port(rtc::Thread* thread,
+           const std::string& type,
            rtc::PacketSocketFactory* factory,
            rtc::Network* network,
            const rtc::IPAddress& ip,
@@ -137,6 +138,7 @@ Port::Port(rtc::Thread* thread,
            const std::string& password)
     : thread_(thread),
       factory_(factory),
+      type_(type),
       send_retransmit_count_attribute_(false),
       network_(network),
       ip_(ip),
@@ -193,7 +195,6 @@ void Port::Construct() {
     ice_username_fragment_ = rtc::CreateRandomString(ICE_UFRAG_LENGTH);
     password_ = rtc::CreateRandomString(ICE_PWD_LENGTH);
   }
-  network_->SignalInactive.connect(this, &Port::OnNetworkInactive);
   network_->SignalTypeChanged.connect(this, &Port::OnNetworkTypeChanged);
   network_cost_ = network_->GetCost();
 
@@ -650,11 +651,6 @@ void Port::OnMessage(rtc::Message *pmsg) {
   }
 }
 
-void Port::OnNetworkInactive(const rtc::Network* network) {
-  ASSERT(network == network_);
-  SignalNetworkInactive(this);
-}
-
 void Port::OnNetworkTypeChanged(const rtc::Network* network) {
   ASSERT(network == network_);
 
@@ -902,12 +898,15 @@ void Connection::set_write_state(WriteState value) {
   }
 }
 
-void Connection::set_receiving(bool value) {
-  if (value != receiving_) {
-    LOG_J(LS_VERBOSE, this) << "set_receiving to " << value;
-    receiving_ = value;
-    SignalStateChange(this);
+void Connection::UpdateReceiving(int64_t now) {
+  bool receiving = now <= last_received() + receiving_timeout_;
+  if (receiving_ == receiving) {
+    return;
   }
+  LOG_J(LS_VERBOSE, this) << "set_receiving to " << receiving;
+  receiving_ = receiving;
+  receiving_unchanged_since_ = now;
+  SignalStateChange(this);
 }
 
 void Connection::set_state(State state) {
@@ -924,6 +923,7 @@ void Connection::set_connected(bool value) {
   if (value != old_value) {
     LOG_J(LS_VERBOSE, this) << "set_connected from: " << old_value << " to "
                             << value;
+    SignalStateChange(this);
   }
 }
 
@@ -951,8 +951,8 @@ void Connection::OnReadPacket(
   if (!port_->GetStunMessage(data, size, addr, &msg, &remote_ufrag)) {
     // The packet did not parse as a valid STUN message
     // This is a data packet, pass it along.
-    set_receiving(true);
     last_data_received_ = rtc::TimeMillis();
+    UpdateReceiving(last_data_received_);
     recv_rate_tracker_.AddSamples(size);
     SignalReadPacket(this, data, size, packet_time);
 
@@ -1168,10 +1168,8 @@ void Connection::UpdateState(int64_t now) {
     set_write_state(STATE_WRITE_TIMEOUT);
   }
 
-  // Check the receiving state.
-  int64_t last_recv_time = last_received();
-  bool receiving = now <= last_recv_time + receiving_timeout_;
-  set_receiving(receiving);
+  // Update the receiving state.
+  UpdateReceiving(now);
   if (dead(now)) {
     Destroy();
   }
@@ -1189,8 +1187,8 @@ void Connection::Ping(int64_t now) {
 }
 
 void Connection::ReceivedPing() {
-  set_receiving(true);
   last_ping_received_ = rtc::TimeMillis();
+  UpdateReceiving(last_ping_received_);
 }
 
 void Connection::ReceivedPingResponse(int rtt) {
@@ -1199,11 +1197,11 @@ void Connection::ReceivedPingResponse(int rtt) {
   // So if we're not already, become writable. We may be bringing a pruned
   // connection back to life, but if we don't really want it, we can always
   // prune it again.
-  set_receiving(true);
+  last_ping_response_received_ = rtc::TimeMillis();
+  UpdateReceiving(last_ping_response_received_);
   set_write_state(STATE_WRITABLE);
   set_state(STATE_SUCCEEDED);
   pings_since_last_response_.clear();
-  last_ping_response_received_ = rtc::TimeMillis();
   rtt_samples_++;
   rtt_ = (RTT_RATIO * rtt_ + rtt) / (RTT_RATIO + 1);
 }
@@ -1233,7 +1231,7 @@ bool Connection::dead(int64_t now) const {
   return now > (time_created_ms_ + MIN_CONNECTION_LIFETIME);
 }
 
-bool Connection::stable(int64_t now) {
+bool Connection::stable(int64_t now) const {
   // A connection is stable if it's RTT has converged and it isn't missing any
   // responses.  We should send pings at a higher rate until the RTT converges
   // and whenever a ping response is missing (so that we can detect
@@ -1505,11 +1503,11 @@ void Connection::MaybeAddPrflxCandidate(ConnectionRequest* request,
   SignalStateChange(this);
 }
 
-bool Connection::rtt_converged() {
+bool Connection::rtt_converged() const {
   return rtt_samples_ > (RTT_RATIO + 1);
 }
 
-bool Connection::missing_responses(int64_t now) {
+bool Connection::missing_responses(int64_t now) const {
   if (pings_since_last_response_.empty()) {
     return false;
   }
@@ -1525,10 +1523,6 @@ ProxyConnection::ProxyConnection(Port* port,
 
 int ProxyConnection::Send(const void* data, size_t size,
                           const rtc::PacketOptions& options) {
-  if (!ReadyToSendMedia()) {
-    error_ = EWOULDBLOCK;
-    return SOCKET_ERROR;
-  }
   stats_.sent_total_packets++;
   int sent = port_->SendTo(data, size, remote_candidate_.address(),
                            options, true);

@@ -25,7 +25,9 @@ namespace bwe {
 
 RembBweSender::RembBweSender(int kbps, BitrateObserver* observer, Clock* clock)
     : bitrate_controller_(
-          BitrateController::CreateBitrateController(clock, observer)),
+          BitrateController::CreateBitrateController(clock,
+                                                     observer,
+                                                     &event_log_)),
       feedback_observer_(bitrate_controller_->CreateRtcpBandwidthObserver()),
       clock_(clock) {
   assert(kbps >= kMinBitrateKbps);
@@ -69,7 +71,7 @@ RembReceiver::RembReceiver(int flow_id, bool plot)
       recv_stats_(ReceiveStatistics::Create(&clock_)),
       latest_estimate_bps_(-1),
       last_feedback_ms_(-1),
-      estimator_(new RemoteBitrateEstimatorAbsSendTime(this)) {
+      estimator_(new RemoteBitrateEstimatorAbsSendTime(this, &clock_)) {
   std::stringstream ss;
   ss << "Estimate_" << flow_id_ << "#1";
   estimate_log_prefix_ = ss.str();

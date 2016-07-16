@@ -45,7 +45,7 @@ VideoReceiver::VideoReceiver(Clock* clock,
       _scheduleKeyRequest(false),
       drop_frames_until_keyframe_(false),
       max_nack_list_size_(0),
-      _codecDataBase(nullptr, nullptr),
+      _codecDataBase(nullptr),
       pre_decode_image_callback_(pre_decode_image_callback),
       _receiveStatsTimer(1000, clock_),
       _retransmissionTimer(10, clock_),
@@ -94,10 +94,6 @@ void VideoReceiver::Process() {
       RequestKeyFrame();
   }
 
-  if (_receiver.TimeUntilNextProcess() == 0) {
-    _receiver.Process();
-  }
-
   // Packet retransmission requests
   // TODO(holmer): Add API for changing Process interval and make sure it's
   // disabled when NACK is off.
@@ -138,8 +134,6 @@ int64_t VideoReceiver::TimeUntilNextProcess() {
   }
   timeUntilNextProcess =
       VCM_MIN(timeUntilNextProcess, _keyRequestTimer.TimeUntilProcess());
-  timeUntilNextProcess =
-      VCM_MIN(timeUntilNextProcess, _receiver.TimeUntilNextProcess());
 
   return timeUntilNextProcess;
 }
@@ -244,15 +238,14 @@ void VideoReceiver::TriggerDecoderShutdown() {
 // Decode next frame, blocking.
 // Should be called as often as possible to get the most out of the decoder.
 int32_t VideoReceiver::Decode(uint16_t maxWaitTimeMs) {
-  int64_t nextRenderTimeMs;
   bool prefer_late_decoding = false;
   {
     rtc::CritScope cs(&receive_crit_);
     prefer_late_decoding = _codecDataBase.PrefersLateDecoding();
   }
 
-  VCMEncodedFrame* frame = _receiver.FrameForDecoding(
-      maxWaitTimeMs, &nextRenderTimeMs, prefer_late_decoding);
+  VCMEncodedFrame* frame =
+      _receiver.FrameForDecoding(maxWaitTimeMs, prefer_late_decoding);
 
   if (!frame)
     return VCM_FRAME_NOT_READY;
@@ -410,8 +403,7 @@ int32_t VideoReceiver::IncomingPacket(const uint8_t* incomingPayload,
     payloadLength = 0;
   }
   const VCMPacket packet(incomingPayload, payloadLength, rtpInfo);
-  int32_t ret = _receiver.InsertPacket(packet, rtpInfo.type.Video.width,
-                                       rtpInfo.type.Video.height);
+  int32_t ret = _receiver.InsertPacket(packet);
 
   // TODO(holmer): Investigate if this somehow should use the key frame
   // request scheduling to throttle the requests.

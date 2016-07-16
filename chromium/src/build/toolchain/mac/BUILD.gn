@@ -7,6 +7,7 @@
 # Linux.
 
 import("../goma.gni")
+import("//build/config/clang/clang.gni")
 import("//build/config/ios/ios_sdk.gni")
 import("//build/config/mac/mac_sdk.gni")
 import("//build/config/mac/symbols.gni")
@@ -28,25 +29,26 @@ if (use_goma) {
 }
 
 if (!use_xcode_clang) {
-  compiler_prefix = compiler_prefix +
-                    rebase_path("//third_party/llvm-build/Release+Asserts/bin/",
-                                root_build_dir)
+  compiler_prefix =
+      compiler_prefix + rebase_path("$clang_base_path/bin/", root_build_dir)
 }
 
-if (current_toolchain == default_toolchain) {
+declare_args() {
   # Reduce the number of tasks using the copy_bundle_data and compile_xcassets
   # tools as they can cause lots of I/O contention when invoking ninja with a
   # large number of parallel jobs (e.g. when using distributed build like goma).
-  pool("bundle_pool") {
-    depth = concurrent_links
-  }
+  bundle_pool_depth = -1
 }
 
-# This will copy the gyp-mac-tool to the build directory. We pass in the source
-# file of the mac tool.
-gyp_mac_tool_source =
-    rebase_path("//tools/gyp/pylib/gyp/mac_tool.py", root_build_dir)
-exec_script("setup_toolchain.py", [ gyp_mac_tool_source ])
+if (current_toolchain == default_toolchain) {
+  pool("bundle_pool") {
+    if (bundle_pool_depth == -1) {
+      depth = concurrent_links
+    } else {
+      depth = bundle_pool_depth
+    }
+  }
+}
 
 # When implementing tools using Python scripts, a TOOL_VERSION=N env
 # variable is placed in front of the command. The N should be incremented
@@ -62,7 +64,6 @@ tool_versions =
     exec_script("get_tool_mtime.py",
                 rebase_path([
                               "//build/toolchain/mac/compile_xcassets.py",
-                              "//build/toolchain/mac/copy_bundle_data.py",
                               "//build/toolchain/mac/filter_libtool.py",
                               "//build/toolchain/mac/linker_driver.py",
                             ],
@@ -305,14 +306,29 @@ template("mac_toolchain") {
     }
 
     tool("copy_bundle_data") {
-      if (is_ios) {
-        _extra_args = "--strings-format=binary1"
-      } else {
-        _extra_args = ""
-      }
-      _tool = rebase_path("//build/toolchain/mac/copy_bundle_data.py",
-                          root_build_dir)
-      command = "TOOL_VERSION=${tool_versions.copy_bundle_data} python $_tool ${_extra_args} {{source}} {{output}}"
+      # copy_command use hardlink if possible but this does not work with
+      # directories. If source is a directory, instead use "pax" to create
+      # the same tree structure using hardlinks to individual files (this
+      # preserve symbolic links too) as recommended in the replies to the
+      # question at http://serverfault.com/q/209888/43689 ("cp -al" isn't
+      # available on macOS).
+      #
+      # According to the man page for pax, the commands to use to clone
+      # olddir to newdir using pax are the following:
+      #
+      #   $ mkdir newdir
+      #   $ cd olddir
+      #   $ pax -rwl . ../newdir
+      #
+      # The _copydir command does exactly that but use an absolute path
+      # constructed using shell variable $OLDPWD (automatically set when
+      # cd is used) as computing the relative path is a bit complex and
+      # using pwd would requires a sub-shell to be created.
+      _copydir = "mkdir -p {{output}} && cd {{source}} && " +
+                 "pax -rwl . \"\$OLDPWD\"/{{output}}"
+      command = "rm -rf {{output}} && if [[ -d {{source}} ]]; then " +
+                _copydir + "; else " + copy_command + "; fi"
+
       description = "COPY_BUNDLE_DATA {{source}} {{output}}"
       pool = ":bundle_pool($default_toolchain)"
     }

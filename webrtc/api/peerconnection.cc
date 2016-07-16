@@ -31,10 +31,12 @@
 #include "webrtc/api/videocapturertracksource.h"
 #include "webrtc/api/videotrack.h"
 #include "webrtc/base/arraysize.h"
+#include "webrtc/base/bind.h"
 #include "webrtc/base/logging.h"
 #include "webrtc/base/stringencode.h"
 #include "webrtc/base/stringutils.h"
 #include "webrtc/base/trace_event.h"
+#include "webrtc/call.h"
 #include "webrtc/media/sctp/sctpdataengine.h"
 #include "webrtc/pc/channelmanager.h"
 #include "webrtc/system_wrappers/include/field_trial.h"
@@ -396,6 +398,34 @@ uint32_t ConvertIceTransportTypeToCandidateFilter(
   return cricket::CF_NONE;
 }
 
+// Helper method to set a voice/video channel on all applicable senders
+// and receivers when one is created/destroyed by WebRtcSession.
+//
+// Used by On(Voice|Video)Channel(Created|Destroyed)
+template <class SENDER,
+          class RECEIVER,
+          class CHANNEL,
+          class SENDERS,
+          class RECEIVERS>
+void SetChannelOnSendersAndReceivers(CHANNEL* channel,
+                                     SENDERS& senders,
+                                     RECEIVERS& receivers,
+                                     cricket::MediaType media_type) {
+  for (auto& sender : senders) {
+    if (sender->media_type() == media_type) {
+      static_cast<SENDER*>(sender->internal())->SetChannel(channel);
+    }
+  }
+  for (auto& receiver : receivers) {
+    if (receiver->media_type() == media_type) {
+      if (!channel) {
+        receiver->internal()->Stop();
+      }
+      static_cast<RECEIVER*>(receiver->internal())->SetChannel(channel);
+    }
+  }
+}
+
 }  // namespace
 
 namespace webrtc {
@@ -608,8 +638,12 @@ bool PeerConnection::Initialize(
   // All the callbacks will be posted to the application from PeerConnection.
   session_->RegisterIceObserver(this);
   session_->SignalState.connect(this, &PeerConnection::OnSessionStateChange);
+  session_->SignalVoiceChannelCreated.connect(
+      this, &PeerConnection::OnVoiceChannelCreated);
   session_->SignalVoiceChannelDestroyed.connect(
       this, &PeerConnection::OnVoiceChannelDestroyed);
+  session_->SignalVideoChannelCreated.connect(
+      this, &PeerConnection::OnVideoChannelCreated);
   session_->SignalVideoChannelDestroyed.connect(
       this, &PeerConnection::OnVideoChannelDestroyed);
   session_->SignalDataChannelCreated.connect(
@@ -713,7 +747,7 @@ rtc::scoped_refptr<RtpSenderInterface> PeerConnection::AddTrack(
     new_sender = RtpSenderProxyWithInternal<RtpSenderInternal>::Create(
         signaling_thread(),
         new AudioRtpSender(static_cast<AudioTrackInterface*>(track),
-                           session_.get(), stats_.get()));
+                           session_->voice_channel(), stats_.get()));
     if (!streams.empty()) {
       new_sender->internal()->set_stream_id(streams[0]->label());
     }
@@ -726,7 +760,7 @@ rtc::scoped_refptr<RtpSenderInterface> PeerConnection::AddTrack(
     new_sender = RtpSenderProxyWithInternal<RtpSenderInternal>::Create(
         signaling_thread(),
         new VideoRtpSender(static_cast<VideoTrackInterface*>(track),
-                           session_.get()));
+                           session_->video_channel()));
     if (!streams.empty()) {
       new_sender->internal()->set_stream_id(streams[0]->label());
     }
@@ -791,10 +825,11 @@ rtc::scoped_refptr<RtpSenderInterface> PeerConnection::CreateSender(
   rtc::scoped_refptr<RtpSenderProxyWithInternal<RtpSenderInternal>> new_sender;
   if (kind == MediaStreamTrackInterface::kAudioKind) {
     new_sender = RtpSenderProxyWithInternal<RtpSenderInternal>::Create(
-        signaling_thread(), new AudioRtpSender(session_.get(), stats_.get()));
+        signaling_thread(),
+        new AudioRtpSender(session_->voice_channel(), stats_.get()));
   } else if (kind == MediaStreamTrackInterface::kVideoKind) {
     new_sender = RtpSenderProxyWithInternal<RtpSenderInternal>::Create(
-        signaling_thread(), new VideoRtpSender(session_.get()));
+        signaling_thread(), new VideoRtpSender(session_->video_channel()));
   } else {
     LOG(LS_ERROR) << "CreateSender called with invalid kind: " << kind;
     return new_sender;
@@ -1230,6 +1265,18 @@ void PeerConnection::RegisterUMAObserver(UMAObserver* observer) {
   }
 }
 
+bool PeerConnection::StartRtcEventLog(rtc::PlatformFile file,
+                                      int64_t max_size_bytes) {
+  return factory_->worker_thread()->Invoke<bool>(
+      RTC_FROM_HERE, rtc::Bind(&PeerConnection::StartRtcEventLog_w, this, file,
+                               max_size_bytes));
+}
+
+void PeerConnection::StopRtcEventLog() {
+  factory_->worker_thread()->Invoke<void>(
+      RTC_FROM_HERE, rtc::Bind(&PeerConnection::StopRtcEventLog_w, this));
+}
+
 const SessionDescriptionInterface* PeerConnection::local_description() const {
   return session_->local_description();
 }
@@ -1322,8 +1369,8 @@ void PeerConnection::CreateAudioReceiver(MediaStreamInterface* stream,
                                          uint32_t ssrc) {
   receivers_.push_back(
       RtpReceiverProxyWithInternal<RtpReceiverInternal>::Create(
-          signaling_thread(),
-          new AudioRtpReceiver(stream, track_id, ssrc, session_.get())));
+          signaling_thread(), new AudioRtpReceiver(stream, track_id, ssrc,
+                                                   session_->voice_channel())));
 }
 
 void PeerConnection::CreateVideoReceiver(MediaStreamInterface* stream,
@@ -1333,7 +1380,7 @@ void PeerConnection::CreateVideoReceiver(MediaStreamInterface* stream,
       RtpReceiverProxyWithInternal<RtpReceiverInternal>::Create(
           signaling_thread(),
           new VideoRtpReceiver(stream, track_id, factory_->worker_thread(),
-                               ssrc, session_.get())));
+                               ssrc, session_->video_channel())));
 }
 
 // TODO(deadbeef): Keep RtpReceivers around even if track goes away in remote
@@ -1346,19 +1393,6 @@ void PeerConnection::DestroyReceiver(const std::string& track_id) {
   } else {
     (*it)->internal()->Stop();
     receivers_.erase(it);
-  }
-}
-
-void PeerConnection::StopReceivers(cricket::MediaType media_type) {
-  TrackInfos* current_tracks = GetRemoteTracks(media_type);
-  for (const auto& track_info : *current_tracks) {
-    auto it = FindReceiverForTrack(track_info.track_id);
-    if (it == receivers_.end()) {
-      LOG(LS_WARNING) << "RtpReceiver for track with id " << track_info.track_id
-                      << " doesn't exist.";
-    } else {
-      (*it)->internal()->Stop();
-    }
   }
 }
 
@@ -1427,8 +1461,9 @@ void PeerConnection::OnAudioTrackAdded(AudioTrackInterface* track,
   // Normal case; we've never seen this track before.
   rtc::scoped_refptr<RtpSenderProxyWithInternal<RtpSenderInternal>> new_sender =
       RtpSenderProxyWithInternal<RtpSenderInternal>::Create(
-          signaling_thread(), new AudioRtpSender(track, stream->label(),
-                                                 session_.get(), stats_.get()));
+          signaling_thread(),
+          new AudioRtpSender(track, stream->label(), session_->voice_channel(),
+                             stats_.get()));
   senders_.push_back(new_sender);
   // If the sender has already been configured in SDP, we call SetSsrc,
   // which will connect the sender to the underlying transport. This can
@@ -1470,8 +1505,8 @@ void PeerConnection::OnVideoTrackAdded(VideoTrackInterface* track,
   // Normal case; we've never seen this track before.
   rtc::scoped_refptr<RtpSenderProxyWithInternal<RtpSenderInternal>> new_sender =
       RtpSenderProxyWithInternal<RtpSenderInternal>::Create(
-          signaling_thread(),
-          new VideoRtpSender(track, stream->label(), session_.get()));
+          signaling_thread(), new VideoRtpSender(track, stream->label(),
+                                                 session_->video_channel()));
   senders_.push_back(new_sender);
   const TrackInfo* track_info =
       FindTrackInfo(local_video_tracks_, stream->label(), track->id());
@@ -2013,12 +2048,28 @@ void PeerConnection::OnSctpDataChannelClosed(DataChannel* channel) {
   }
 }
 
+void PeerConnection::OnVoiceChannelCreated() {
+  SetChannelOnSendersAndReceivers<AudioRtpSender, AudioRtpReceiver>(
+      session_->voice_channel(), senders_, receivers_,
+      cricket::MEDIA_TYPE_AUDIO);
+}
+
 void PeerConnection::OnVoiceChannelDestroyed() {
-  StopReceivers(cricket::MEDIA_TYPE_AUDIO);
+  SetChannelOnSendersAndReceivers<AudioRtpSender, AudioRtpReceiver,
+                                  cricket::VoiceChannel>(
+      nullptr, senders_, receivers_, cricket::MEDIA_TYPE_AUDIO);
+}
+
+void PeerConnection::OnVideoChannelCreated() {
+  SetChannelOnSendersAndReceivers<VideoRtpSender, VideoRtpReceiver>(
+      session_->video_channel(), senders_, receivers_,
+      cricket::MEDIA_TYPE_VIDEO);
 }
 
 void PeerConnection::OnVideoChannelDestroyed() {
-  StopReceivers(cricket::MEDIA_TYPE_VIDEO);
+  SetChannelOnSendersAndReceivers<VideoRtpSender, VideoRtpReceiver,
+                                  cricket::VideoChannel>(
+      nullptr, senders_, receivers_, cricket::MEDIA_TYPE_VIDEO);
 }
 
 void PeerConnection::OnDataChannelCreated() {
@@ -2139,6 +2190,8 @@ bool PeerConnection::InitializePortAllocator_n(
     return false;
   }
 
+  port_allocator_->Initialize();
+
   // To handle both internal and externally created port allocator, we will
   // enable BUNDLE here.
   int portallocator_flags = port_allocator_->flags();
@@ -2173,7 +2226,8 @@ bool PeerConnection::InitializePortAllocator_n(
   // Call this last since it may create pooled allocator sessions using the
   // properties set above.
   port_allocator_->SetConfiguration(stun_servers, turn_servers,
-                                    configuration.ice_candidate_pool_size);
+                                    configuration.ice_candidate_pool_size,
+                                    configuration.prune_turn_ports);
   return true;
 }
 
@@ -2189,8 +2243,17 @@ bool PeerConnection::ReconfigurePortAllocator_n(
   // Call this last since it may create pooled allocator sessions using the
   // candidate filter set above.
   port_allocator_->SetConfiguration(stun_servers, turn_servers,
-                                    configuration.ice_candidate_pool_size);
+                                    configuration.ice_candidate_pool_size,
+                                    configuration.prune_turn_ports);
   return true;
 }
 
+bool PeerConnection::StartRtcEventLog_w(rtc::PlatformFile file,
+                                        int64_t max_size_bytes) {
+  return media_controller_->call_w()->StartEventLog(file, max_size_bytes);
+}
+
+void PeerConnection::StopRtcEventLog_w() {
+  media_controller_->call_w()->StopEventLog();
+}
 }  // namespace webrtc
