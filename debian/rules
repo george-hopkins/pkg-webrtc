@@ -25,6 +25,10 @@ GYP_DEFINES += use_dbus=0
 GYP_DEFINES += clang=0
 GYP_DEFINES += clang_use_chrome_plugins=0
 
+# Disable fatal compiler warnings
+GYP_DEFINES += disable_fatal_linker_warnings=1
+GYP_DEFINES += werror=-Wno-error
+
 # Set Android variables to avoid error messages
 GYP_DEFINES += android_sdk=dummy
 GYP_DEFINES += android_sdk_jar=dummy
