@@ -6,9 +6,9 @@ Subject: Setup Java
  all.gyp                                            |  1 +
  chromium/src/build/android/gyp/util/build_utils.py |  9 ++---
  chromium/src/build/java.gypi                       | 38 +---------------------
- webrtc/api/api.gyp                                 | 23 +++++--------
+ webrtc/api/api.gyp                                 | 28 ++++++++--------
  webrtc/api/api_java.gyp                            |  7 ++--
- 5 files changed, 17 insertions(+), 61 deletions(-)
+ 5 files changed, 22 insertions(+), 61 deletions(-)
 
 diff --git a/all.gyp b/all.gyp
 index 2382290..5df967c 100644
@@ -125,7 +125,7 @@ index 171d5e0..a4963f1 100644
    ],
  }
 diff --git a/webrtc/api/api.gyp b/webrtc/api/api.gyp
-index 15c88dd..74e110a 100644
+index 15c88dd..adc1d66 100644
 --- a/webrtc/api/api.gyp
 +++ b/webrtc/api/api.gyp
 @@ -24,7 +24,10 @@
@@ -172,7 +172,7 @@ index 15c88dd..74e110a 100644
            ],
            # TODO(kjellander): Make the code compile without disabling these flags.
            # See https://bugs.chromium.org/p/webrtc/issues/detail?id=3307
-@@ -85,6 +75,9 @@
+@@ -85,11 +75,19 @@
            'sources': [
             'android/jni/jni_onload.cc',
            ],
@@ -182,6 +182,16 @@ index 15c88dd..74e110a 100644
            'variables': {
              # This library uses native JNI exports; tell GYP so that the
              # required symbols will be kept.
+             'use_native_jni_exports': 1,
+           },
++          'link_settings': {
++            'libraries': [
++              '-lstdc++',
++            ],
++          },
+         },
+       ]
+     }],
 diff --git a/webrtc/api/api_java.gyp b/webrtc/api/api_java.gyp
 index 4e18035..fefaa85 100644
 --- a/webrtc/api/api_java.gyp
