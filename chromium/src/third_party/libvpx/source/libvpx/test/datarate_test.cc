@@ -90,7 +90,7 @@ class DatarateTestLarge : public ::libvpx_test::EncoderTest,
           << pkt->data.frame.pts;
     }
 
-    const size_t frame_size_in_bits = pkt->data.frame.sz * 8;
+    const int64_t frame_size_in_bits = pkt->data.frame.sz * 8;
 
     // Subtract from the buffer the bits associated with a played back frame.
     bits_in_buffer_model_ -= frame_size_in_bits;
@@ -135,7 +135,7 @@ class DatarateTestLarge : public ::libvpx_test::EncoderTest,
   double duration_;
   double file_datarate_;
   double effective_datarate_;
-  size_t bits_in_last_frame_;
+  int64_t bits_in_last_frame_;
   int denoiser_on_;
   int denoiser_offon_test_;
   int denoiser_offon_period_;

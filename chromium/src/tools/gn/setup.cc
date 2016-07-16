@@ -14,6 +14,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/process/launch.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -142,8 +143,9 @@ void ItemDefinedCallback(base::MessageLoop* main_loop,
                          scoped_refptr<Builder> builder,
                          std::unique_ptr<Item> item) {
   DCHECK(item);
-  main_loop->PostTask(FROM_HERE, base::Bind(&Builder::ItemDefined, builder,
-                                            base::Passed(&item)));
+  main_loop->task_runner()->PostTask(
+      FROM_HERE,
+      base::Bind(&Builder::ItemDefined, builder, base::Passed(&item)));
 }
 
 void DecrementWorkCount() {
@@ -512,7 +514,7 @@ bool Setup::FillSourceDir(const base::CommandLine& cmdline) {
       if (dotfile_name_.empty()) {
         Err(Location(), "Could not load dotfile.",
             "The file \"" + FilePathToUTF8(dot_file_path) +
-            "\" cound't be loaded.").PrintToStdout();
+            "\" couldn't be loaded.").PrintToStdout();
         return false;
       }
     }
@@ -622,7 +624,7 @@ bool Setup::RunConfigFile() {
   dotfile_input_file_.reset(new InputFile(SourceFile("//.gn")));
   if (!dotfile_input_file_->Load(dotfile_name_)) {
     Err(Location(), "Could not load dotfile.",
-        "The file \"" + FilePathToUTF8(dotfile_name_) + "\" cound't be loaded")
+        "The file \"" + FilePathToUTF8(dotfile_name_) + "\" couldn't be loaded")
         .PrintToStdout();
     return false;
   }

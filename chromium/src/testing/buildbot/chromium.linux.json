@@ -130,6 +130,20 @@
         "test": "breakpad_unittests"
       },
       {
+        "override_isolate_target": "capture_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "android_devices": "4",
+              "device_os": "KTU84P",
+              "device_type": "hammerhead"
+            }
+          ]
+        },
+        "test": "capture_unittests"
+      },
+      {
         "override_isolate_target": "cc_unittests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -340,21 +354,6 @@
         "test": "gpu_unittests"
       },
       {
-        "override_isolate_target": "ipc_mojo_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "android_devices": "4",
-              "device_os": "KTU84P",
-              "device_type": "hammerhead"
-            }
-          ],
-          "hard_timeout": 60
-        },
-        "test": "ipc_mojo_unittests"
-      },
-      {
         "override_isolate_target": "ipc_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -456,21 +455,6 @@
           "hard_timeout": 60
         },
         "test": "mojo_runner_host_unittests"
-      },
-      {
-        "override_isolate_target": "mojo_surfaces_lib_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "android_devices": "4",
-              "device_os": "KTU84P",
-              "device_type": "hammerhead"
-            }
-          ],
-          "hard_timeout": 60
-        },
-        "test": "mojo_surfaces_lib_unittests"
       },
       {
         "override_isolate_target": "mojo_system_unittests",
@@ -620,7 +604,8 @@
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 1920
+          "hard_timeout": 960,
+          "shards": 1
         }
       }
     ],
@@ -687,6 +672,9 @@
         "test": "breakpad_unittests"
       },
       {
+        "test": "capture_unittests"
+      },
+      {
         "test": "cc_unittests"
       },
       {
@@ -720,9 +708,6 @@
         "test": "gpu_unittests"
       },
       {
-        "test": "ipc_mojo_unittests"
-      },
-      {
         "test": "ipc_tests"
       },
       {
@@ -742,9 +727,6 @@
       },
       {
         "test": "mojo_runner_host_unittests"
-      },
-      {
-        "test": "mojo_surfaces_lib_unittests"
       },
       {
         "test": "mojo_system_unittests"
@@ -857,6 +839,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "capture_unittests"
       },
       {
         "test": "cast_alsa_cma_backend_unittests"
@@ -1055,6 +1043,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "capture_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "cast_unittests"
       },
       {
@@ -1094,6 +1088,17 @@
         "test": "compositor_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--enable-browser-side-navigation",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/browser-side-navigation.linux.content_browsertests.filter"
+        ],
+        "name": "browser_side_navigation_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -1211,12 +1216,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "ipc_mojo_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "ipc_tests"
       },
       {
@@ -1308,12 +1307,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "mojo_shell_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mojo_surfaces_lib_unittests"
       },
       {
         "swarming": {
@@ -1478,7 +1471,9 @@
           "telemetry_perf_unittests_run"
         ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "hard_timeout": 960,
+          "shards": 12
         }
       },
       {
@@ -1561,6 +1556,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "capture_unittests"
       },
       {
         "swarming": {
@@ -1694,12 +1695,6 @@
           "shards": 3
         },
         "test": "interactive_ui_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ipc_mojo_unittests"
       },
       {
         "swarming": {
@@ -1897,7 +1892,9 @@
           "telemetry_perf_unittests_run"
         ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "hard_timeout": 960,
+          "shards": 12
         }
       },
       {
@@ -1968,6 +1965,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "capture_unittests"
       },
       {
         "swarming": {
@@ -2089,12 +2092,6 @@
           "shards": 3
         },
         "test": "interactive_ui_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ipc_mojo_unittests"
       },
       {
         "swarming": {
